@@ -643,67 +643,6 @@ async function edSave() {
   }
 }
 
-  const rangeData = {
-    meta: {
-      game_type:   ed.gameType,
-      table_size:  ed.tableSize,
-      stack_depth: ed.depth + 'bb',
-      label:       `${ed.gameType} ${ed.tableSize} ${ed.depth}bb`,
-    },
-    config: {
-      positions:       cfg.positions,
-      rfi_positions:   cfg.rfi,
-      vs_rfi_options:  cfg.vs_rfi,
-      vs_3bet_options: cfg.vs_3bet,
-    },
-    spots: ed.ranges,
-  };
-
-  const saveBtn = document.getElementById('eSaveBtn');
-  saveBtn.textContent = 'Saving…';
-  saveBtn.disabled    = true;
-
-  try {
-    const res    = await fetch('/api/ranges/save', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ filename: rawName, range_data: rangeData }),
-    });
-    const result = await res.json();
-
-    if (result.status === 'saved') {
-      saveBtn.textContent = '✓ Saved!';
-      saveBtn.style.background    = 'rgba(39,174,96,.25)';
-      saveBtn.style.borderColor   = '#27ae60';
-      saveBtn.style.color         = '#2ecc71';
-      inputEl.value = '';
-
-      // Refresh drill file list so new range appears immediately
-      if (typeof drillRefreshFileList === 'function') drillRefreshFileList();
-
-      setTimeout(() => {
-        saveBtn.textContent          = 'Save Range';
-        saveBtn.style.background     = '';
-        saveBtn.style.borderColor    = '';
-        saveBtn.style.color          = '';
-        saveBtn.disabled             = false;
-      }, 2000);
-    } else {
-      throw new Error('Server returned non-saved status');
-    }
-  } catch (e) {
-    saveBtn.textContent = '✗ Error';
-    saveBtn.style.borderColor = '#e74c3c';
-    saveBtn.style.color       = '#e74c3c';
-    setTimeout(() => {
-      saveBtn.textContent       = 'Save Range';
-      saveBtn.style.borderColor = '';
-      saveBtn.style.color       = '';
-      saveBtn.disabled          = false;
-    }, 2000);
-  }
-}
-
 function edShowSaveToast(msg) {
   const t = document.getElementById('toast');
   if (t) {
