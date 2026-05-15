@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
 from pydantic import BaseModel
 from typing import Optional
 import json
@@ -15,7 +17,7 @@ from drill_engine import (
 
 app = FastAPI(title="NLH Range Trainer")
 
-RANGE_FILE   = "data/cash_micro_100bb.json"
+RANGE_FILE   = "cash_micro_100bb.json"
 STATS_FILE   = "stats.json"
 HISTORY_FILE = "history.json"
 HISTORY_MAX  = 200  # keep last N hands
@@ -107,7 +109,6 @@ class AnswerRequest(BaseModel):
     drill_hand: dict
     player_action: str
     is_timeout: bool = False
-    file: str = ""  # range JSON basename (same as /api/drill/hand?file=)
 
 
 # ---------- API routes ----------
@@ -224,15 +225,7 @@ def get_drill_hand(
 @app.post("/api/drill/answer")
 def submit_answer(request: AnswerRequest):
     """Check the player's answer, update stats and return feedback."""
-    try:
-        data = _load_range(request.file or "")
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"Range file not found: {request.file}")
-    result = check_answer(
-        request.drill_hand,
-        request.player_action,
-        request.is_timeout,
-    )
+    result = check_answer(request.drill_hand, request.player_action, request.is_timeout)
 
     drill_hand = request.drill_hand
     spot = drill_hand.get("spot", "")
@@ -379,5 +372,11 @@ def save_range_file(request: SaveRangeRequest):
 
 
 # ---------- serve frontend ----------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
 
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static_files")
+
+@app.get("/")
+async def serve_index():
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
