@@ -1,0 +1,113 @@
+{
+  "meta": {
+    "game_type": "Cash",
+    "table_size": "6max",
+    "stack_depth": "100bb",
+    "label": "Micro 100bb sample"
+  },
+  "config": {
+    "positions": ["UTG", "MP", "CO", "BTN", "SB", "BB"],
+    "rfi_positions": ["UTG", "MP", "CO", "BTN", "SB"],
+    "vs_rfi_options": {
+      "MP": ["UTG"],
+      "CO": ["UTG", "MP"],
+      "BTN": ["UTG", "MP", "CO"],
+      "SB": ["UTG", "MP", "CO", "BTN"],
+      "BB": ["UTG", "MP", "CO", "BTN", "SB"]
+    },
+    "vs_3bet_options": {
+      "UTG": ["MP", "CO", "BTN", "SB", "BB"],
+      "MP": ["CO", "BTN", "SB", "BB"],
+      "CO": ["BTN", "SB", "BB"],
+      "BTN": ["SB", "BB"],
+      "SB": ["BB"]
+    }
+  },
+  "ranges": {
+    "RFI": {
+      "UTG": {
+        "AA": 1.0,
+        "KK": 1.0,
+        "QQ": 1.0,
+        "JJ": 0.85,
+        "AKs": 1.0,
+        "AKo": 0.9,
+        "AQs": 0.75,
+        "AJs": 0.5
+      },
+      "MP": {
+        "AA": 1.0,
+        "KK": 1.0,
+        "QQ": 1.0,
+        "JJ": 1.0,
+        "TT": 0.7,
+        "AKs": 1.0,
+        "AKo": 1.0,
+        "AQs": 0.85,
+        "KQs": 0.4
+      },
+      "CO": {
+        "AA": 1.0,
+        "KK": 1.0,
+        "QQ": 1.0,
+        "JJ": 1.0,
+        "TT": 1.0,
+        "99": 0.5,
+        "AKs": 1.0,
+        "AKo": 1.0,
+        "AQs": 1.0,
+        "A5s": 0.35
+      },
+      "BTN": {
+        "AA": 1.0,
+        "72o": 0.1,
+        "AKo": 1.0,
+        "T9s": 0.6
+      },
+      "SB": {
+        "AA": 1.0,
+        "KQo": 0.55,
+        "JTs": 0.45
+      }
+    },
+    "vs_RFI": {
+      "MP": {
+        "vs_UTG": {
+          "QQ": { "fold": 0.1, "call": 0.2, "3bet": 0.7 },
+          "JJ": { "fold": 0.15, "call": 0.55, "3bet": 0.3 },
+          "AKo": { "fold": 0.05, "call": 0.65, "3bet": 0.3 }
+        }
+      },
+      "CO": {
+        "vs_UTG": {
+          "AJs": { "fold": 0.2, "call": 0.5, "3bet": 0.3 },
+          "KQs": { "fold": 0.25, "call": 0.6, "3bet": 0.15 }
+        },
+        "vs_MP": {
+          "TT": { "fold": 0.05, "call": 0.35, "3bet": 0.6 }
+        }
+      },
+      "BB": {
+        "vs_SB": {
+          "QJo": { "fold": 0.4, "call": 0.45, "3bet": 0.15 }
+        }
+      }
+    },
+    "vs_3bet": {
+      "UTG": {
+        "vs_MP": {
+          "AKs": { "fold": 0.15, "call": 0.35, "4bet": 0.5 },
+          "QQ": { "fold": 0.05, "call": 0.25, "4bet": 0.7 }
+        },
+        "vs_CO": {
+          "JJ": { "fold": 0.2, "call": 0.5, "4bet": 0.3 }
+        }
+      },
+      "BTN": {
+        "vs_BB": {
+          "A4s": { "fold": 0.35, "call": 0.45, "4bet": 0.2 }
+        }
+      }
+    }
+  }
+}

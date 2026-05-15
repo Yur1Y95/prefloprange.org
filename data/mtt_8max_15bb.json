@@ -1,0 +1,135 @@
+{
+  "meta": {
+    "game_type": "MTT",
+    "table_size": "8max",
+    "stack_depth": "15bb",
+    "label": "mtt_8max_15bb"
+  },
+  "config": {
+    "positions": [
+      "UTG",
+      "UTG+1",
+      "MP",
+      "HJ",
+      "CO",
+      "BTN",
+      "SB",
+      "BB"
+    ],
+    "rfi_positions": [
+      "UTG",
+      "UTG+1",
+      "MP",
+      "HJ",
+      "CO",
+      "BTN",
+      "SB"
+    ],
+    "vs_rfi_options": {
+      "UTG+1": [
+        "UTG"
+      ],
+      "MP": [
+        "UTG",
+        "UTG+1"
+      ],
+      "HJ": [
+        "UTG",
+        "UTG+1",
+        "MP"
+      ],
+      "CO": [
+        "UTG",
+        "UTG+1",
+        "MP",
+        "HJ"
+      ],
+      "BTN": [
+        "UTG",
+        "UTG+1",
+        "MP",
+        "HJ",
+        "CO"
+      ],
+      "SB": [
+        "UTG",
+        "UTG+1",
+        "MP",
+        "HJ",
+        "CO",
+        "BTN"
+      ],
+      "BB": [
+        "UTG",
+        "UTG+1",
+        "MP",
+        "HJ",
+        "CO",
+        "BTN",
+        "SB"
+      ]
+    },
+    "vs_3bet_options": {
+      "UTG": [
+        "UTG+1",
+        "MP",
+        "HJ",
+        "CO",
+        "BTN",
+        "SB",
+        "BB"
+      ],
+      "UTG+1": [
+        "MP",
+        "HJ",
+        "CO",
+        "BTN",
+        "SB",
+        "BB"
+      ],
+      "MP": [
+        "HJ",
+        "CO",
+        "BTN",
+        "SB",
+        "BB"
+      ],
+      "HJ": [
+        "CO",
+        "BTN",
+        "SB",
+        "BB"
+      ],
+      "CO": [
+        "BTN",
+        "SB",
+        "BB"
+      ],
+      "BTN": [
+        "SB",
+        "BB"
+      ],
+      "SB": [
+        "BB"
+      ]
+    }
+  },
+  "ranges": {
+    "RFI": {
+      "UTG": {
+        "55": 1,
+        "66": 1,
+        "77": 1,
+        "88": 1,
+        "99": 1,
+        "AA": 1,
+        "KK": 1,
+        "QQ": 1,
+        "JJ": 1,
+        "TT": 1
+      }
+    },
+    "vs_RFI": {},
+    "vs_3bet": {}
+  }
+}

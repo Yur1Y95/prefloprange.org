@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NLH Range Trainer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <nav class="topbar">
+    <span class="logo">NLH TRAINER</span>
+    <div class="mode-tabs">
+      <button class="mode-tab" data-mode="editor">Editor</button>
+      <button class="mode-tab" data-mode="visualizer">Visualizer</button>
+      <button class="mode-tab active" data-mode="drill">Drill</button>
+      <button class="mode-tab" data-mode="analyzer">Analyzer</button>
+    </div>
+    <div class="session-pill" id="sessionPill">0 / 0 &nbsp;·&nbsp; —</div>
+  </nav>
+
+  <!-- ═══════════════ EDITOR ═══════════════ -->
+  <main class="layout editor-layout" id="editorMode" style="display:none">
+
+    <aside class="panel panel-left">
+
+      <div class="control-group">
+        <label class="control-label">Format</label>
+        <div class="meta-row">
+          <span class="mode-label">Game</span>
+          <select class="mini-select" id="eGameType">
+            <option value="MTT">MTT</option>
+            <option value="Cash">Cash</option>
+          </select>
+        </div>
+        <div class="meta-row">
+          <span class="mode-label">Table</span>
+          <select class="mini-select" id="eTableSize">
+            <option value="6max">6-max</option>
+            <option value="8max">8-max</option>
+            <option value="9max">9-max</option>
+          </select>
+        </div>
+        <div class="meta-row">
+          <span class="mode-label">Depth</span>
+          <select class="mini-select" id="eDepth">
+            <option value="100">100 BB</option>
+            <option value="60">60 BB</option>
+            <option value="40">40 BB</option>
+            <option value="30">30 BB</option>
+            <option value="20">20 BB</option>
+            <option value="15">15 BB</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">Spot</label>
+        <div class="seg-buttons" id="eSpotBtns">
+          <button class="seg active" data-espot="RFI">RFI</button>
+          <button class="seg" data-espot="vs_RFI">vs RFI</button>
+          <button class="seg" data-espot="vs_3bet">vs 3-Bet</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">Hero</label>
+        <div class="pos-buttons" id="eHeroBtns"></div>
+      </div>
+
+      <div class="control-group" id="eVillainGroup" style="display:none">
+        <label class="control-label">Villain</label>
+        <div class="pos-buttons" id="eVillainBtns"></div>
+      </div>
+
+    </aside>
+
+    <!-- CENTER: editor matrix -->
+    <section class="editor-section">
+      <div class="editor-topbar">
+        <span class="editor-status" id="editorStatus">— combos · —%</span>
+        <span class="viz-hover" id="editorHover">Click or drag to paint</span>
+      </div>
+      <div class="editor-matrix-wrap">
+        <div class="editor-matrix" id="editorMatrix"></div>
+      </div>
+    </section>
+
+    <!-- RIGHT: paint tools -->
+    <aside class="panel panel-right">
+
+      <div class="control-group">
+        <label class="control-label">Action</label>
+        <div class="paint-actions" id="paintActions">
+          <button class="paint-btn active" data-action="open">Open</button>
+          <button class="paint-btn" data-action="3bet">3-Bet</button>
+          <button class="paint-btn" data-action="call">Call</button>
+          <button class="paint-btn" data-action="4bet">4-Bet</button>
+          <button class="paint-btn" data-action="fold">Fold</button>
+          <button class="paint-btn" data-action="clear">✕ Clear</button>
+        </div>
+      </div>
+
+      <div class="control-group" style="position:relative">
+        <label class="control-label">Quick Select</label>
+        <button class="qs-trigger" id="qsTrigger">Select Group ▾</button>
+
+        <div class="qs-popup" id="qsPopup" style="display:none">
+          <div class="qs-col">
+            <div class="qs-heading">Pairs</div>
+            <button class="qs-btn" data-qs="pairs-all"    title="AA–22">All pairs</button>
+            <button class="qs-btn" data-qs="pairs-prem"   title="AA–JJ">Premium</button>
+            <button class="qs-btn" data-qs="pairs-med"    title="TT–77">Medium</button>
+            <button class="qs-btn" data-qs="pairs-small"  title="66–22">Small</button>
+          </div>
+          <div class="qs-col">
+            <div class="qs-heading">Suited</div>
+            <button class="qs-btn" data-qs="s-bw"   title="AKs–JTs">Broadways</button>
+            <button class="qs-btn" data-qs="s-ax"   title="AKs–A2s">Aces</button>
+            <button class="qs-btn" data-qs="s-kx"   title="KQs–K2s">Kings</button>
+            <button class="qs-btn" data-qs="s-sc"   title="JTs–54s">Connectors</button>
+            <button class="qs-btn" data-qs="s-og"   title="J9s–53s">One-gappers</button>
+          </div>
+          <div class="qs-col">
+            <div class="qs-heading">Offsuit</div>
+            <button class="qs-btn" data-qs="o-bw"   title="AKo–JTo">Broadways</button>
+            <button class="qs-btn" data-qs="o-ax"   title="AKo–A2o">Aces</button>
+            <div class="qs-heading" style="margin-top:8px">All</div>
+            <button class="qs-btn" data-qs="all-ax"  title="AXs + AXo">All aces</button>
+            <button class="qs-btn" data-qs="all-bw"  title="J+ both suits">Broadways</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">Frequency</label>
+        <div class="freq-row">
+          <input type="range" class="freq-slider" id="freqSlider" min="0" max="100" value="100">
+          <span class="freq-val" id="freqVal">100%</span>
+        </div>
+        <div class="quick-freqs">
+          <button class="qf-btn active" data-freq="100">100</button>
+          <button class="qf-btn" data-freq="75">75</button>
+          <button class="qf-btn" data-freq="50">50</button>
+          <button class="qf-btn" data-freq="25">25</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">Range Stats</label>
+        <div class="stat-row"><span class="stat-key">Combos</span><span class="stat-val" id="eCombos">—</span></div>
+        <div class="stat-row"><span class="stat-key">% of hands</span><span class="stat-val" id="ePct">—</span></div>
+      </div>
+
+      <div class="save-section">
+        <label class="control-label">Save</label>
+        <input class="save-input" id="eSaveFilename" placeholder="e.g. mtt_8max_100bb" type="text">
+        <button class="save-btn" id="eSaveBtn">Save Range</button>
+        <button class="reset-btn" id="eClearAllBtn">Clear All Hands</button>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- ═══════════════ VISUALIZER ═══════════════ -->
+  <main class="layout viz-layout" id="vizMode" style="display:none">
+
+    <aside class="panel panel-left">
+      <div class="control-group">
+        <label class="control-label">Format</label>
+        <div class="seg-buttons" id="vGameBtns">
+          <button class="seg active" data-vgame="Cash">Cash</button>
+          <button class="seg" data-vgame="MTT">MTT</button>
+        </div>
+        <div class="meta-row" style="margin-top:4px">
+          <span class="mode-label">Table</span>
+          <select class="mini-select" id="vTableSelect">
+            <option value="">Any</option>
+            <option value="6max">6-max</option>
+            <option value="8max">8-max</option>
+            <option value="9max">9-max</option>
+          </select>
+        </div>
+        <div class="meta-row" style="margin-top:4px">
+          <span class="mode-label">Depth</span>
+          <select class="mini-select" id="vDepthSelect"></select>
+        </div>
+      </div>
+      <div class="control-group">
+        <label class="control-label">Spot</label>
+        <div class="seg-buttons" id="vSpotBtns">
+          <button class="seg active" data-vspot="RFI">RFI</button>
+          <button class="seg" data-vspot="vs_RFI">vs RFI</button>
+          <button class="seg" data-vspot="vs_3bet">vs 3-Bet</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <label class="control-label">Hero Position</label>
+        <div class="pos-buttons" id="vHeroBtns"></div>
+      </div>
+      <div class="control-group" id="vVillainGroup" style="display:none">
+        <label class="control-label">Villain Position</label>
+        <div class="pos-buttons" id="vVillainBtns"></div>
+      </div>
+      <div class="control-group" id="vActionGroup" style="display:none">
+        <label class="control-label">Action</label>
+        <div class="seg-buttons" id="vActionBtns">
+          <button class="seg active" data-vaction="all">All</button>
+          <button class="seg" data-vaction="3bet">3-Bet</button>
+          <button class="seg" data-vaction="call">Call</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <label class="control-label">RNG</label>
+        <label class="toggle-row">
+          <input type="checkbox" id="vRngToggle">
+          <span class="toggle-track"></span>
+          <span class="toggle-text">Enable RNG</span>
+        </label>
+        <button class="deal-btn" id="vRngGenBtn" style="margin-top:6px">Generate</button>
+      </div>
+    </aside>
+
+    <section class="viz-section">
+      <div class="viz-topbar">
+        <span class="viz-status" id="vizStatus">—</span>
+        <span class="viz-hover"  id="vizHover">Hover over a hand</span>
+      </div>
+      <div class="matrix-wrap">
+        <div class="matrix" id="matrix"></div>
+      </div>
+    </section>
+
+    <aside class="panel panel-right viz-legend-panel">
+      <div class="control-label" style="margin-bottom:8px">RFI Legend</div>
+      <div class="legend-items" id="rfiLegend">
+        <div class="legend-row"><div class="legend-swatch" style="background:#2E7D32"></div><span>100% — always</span></div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#66BB6A"></div><span>75% — often</span></div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#D4E157"></div><span>50% — mixed</span></div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#FFA726"></div><span>&lt;50% — rare</span></div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#1e2a22;border:1px solid #2a3a2a"></div><span>0% — fold</span></div>
+      </div>
+      <div class="control-label" style="margin:16px 0 8px" id="vsLegendLabel"></div>
+      <div class="legend-items" id="vsLegend" style="display:none">
+        <div class="legend-row"><div class="legend-swatch" style="background:#F44336"></div><span>3-Bet / 4-Bet</span></div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#3F7FB5"></div><span>Call</span></div>
+        <div class="legend-row"><div class="legend-swatch" style="background:#2a2a2a;border:1px solid #333"></div><span>Fold</span></div>
+        <div class="legend-row"><div class="legend-swatch" style="background:linear-gradient(to right,#F44336 40%,#3F7FB5 40%)"></div><span>Mixed (split)</span></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ═══════════════ DRILL ═══════════════ -->
+  <main class="layout" id="drillMode">
+
+    <aside class="panel panel-left">
+      <div class="control-group">
+        <label class="control-label">Format</label>
+        <div class="seg-buttons" id="dGameBtns">
+          <button class="seg active" data-dgame="Cash">Cash</button>
+          <button class="seg" data-dgame="MTT">MTT</button>
+        </div>
+        <div class="meta-row" style="margin-top:4px">
+          <span class="mode-label">Table</span>
+          <select class="mini-select" id="dTableSelect">
+            <option value="">Any</option>
+            <option value="6max">6-max</option>
+            <option value="8max">8-max</option>
+            <option value="9max">9-max</option>
+          </select>
+        </div>
+        <div class="meta-row" style="margin-top:4px">
+          <span class="mode-label">Depth</span>
+          <select class="mini-select" id="dDepthSelect"></select>
+        </div>
+      </div>
+      <div class="control-group">
+        <label class="control-label">Spot</label>
+        <div class="seg-buttons" id="spotBtns">
+          <button class="seg active" data-spot="RFI">RFI</button>
+          <button class="seg" data-spot="vs_RFI">vs RFI</button>
+          <button class="seg" data-spot="vs_3bet">vs 3-Bet</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <label class="control-label">Hero</label>
+        <div class="pos-buttons" id="heroBtns"></div>
+        <div class="mode-row">
+          <span class="mode-label">Mode</span>
+          <select class="mini-select" id="heroMode">
+            <option value="fixed">Fixed</option>
+            <option value="random">Random</option>
+          </select>
+        </div>
+      </div>
+      <div class="control-group" id="villainGroup" style="display:none">
+        <label class="control-label">Villain</label>
+        <div class="pos-buttons" id="villainBtns"></div>
+        <div class="mode-row">
+          <span class="mode-label">Mode</span>
+          <select class="mini-select" id="villainMode">
+            <option value="fixed">Fixed</option>
+            <option value="random">Random</option>
+          </select>
+        </div>
+      </div>
+      <div class="control-group">
+        <label class="control-label">Options</label>
+        <label class="toggle-row">
+          <input type="checkbox" id="timerToggle">
+          <span class="toggle-track"></span>
+          <span class="toggle-text">Timer (8s)</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="autoNextToggle">
+          <span class="toggle-track"></span>
+          <span class="toggle-text">Auto-next</span>
+        </label>
+      </div>
+      <button class="deal-btn" id="newHandBtn">Deal Hand</button>
+    </aside>
+
+    <section class="table-section">
+      <div class="spot-line" id="spotLine">RFI · UTG</div>
+      <div class="table-wrap">
+        <div class="table-rim"></div>
+        <div class="table-felt">
+          <div class="action-log" id="actionLog"></div>
+          <div class="pot-block">
+            <span class="pot-label">POT</span>
+            <span class="pot-value" id="potValue">1.5 BB</span>
+          </div>
+        </div>
+        <div class="seats" id="seats"></div>
+        <svg class="timer-ring" id="timerRing" viewBox="0 0 560 360" style="display:none">
+          <ellipse cx="280" cy="180" rx="268" ry="168"
+                   fill="none" stroke="#c9a84c" stroke-width="4"
+                   stroke-dasharray="1340" stroke-dashoffset="0"
+                   id="timerArc" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="hero-cards" id="heroCards">
+        <div class="card card-back" id="card1"></div>
+        <div class="card card-back" id="card2"></div>
+      </div>
+      <div class="action-bar" id="actionBar"></div>
+      <div class="feedback-strip" id="feedbackStrip" style="display:none">
+        <span class="fb-icon" id="fbIcon"></span>
+        <span class="fb-msg"  id="fbMsg"></span>
+        <span class="fb-ev"   id="fbEv"></span>
+        <button class="fb-next" id="fbNext">Next →</button>
+      </div>
+    </section>
+
+    <aside class="panel panel-right">
+      <div class="right-tabs">
+        <button class="right-tab active" data-rtab="stats">Stats</button>
+        <button class="right-tab" data-rtab="history">History</button>
+      </div>
+      <div id="statsView">
+        <div class="stats-summary" id="statsSummary"></div>
+        <div class="stats-breakdown" id="statsBreakdown"></div>
+        <button class="reset-btn" id="resetBtn">Reset Stats</button>
+      </div>
+      <div id="historyView" style="display:none; flex:1; flex-direction:column; gap:8px; overflow:hidden;">
+        <div class="history-list" id="historyList"></div>
+        <button class="reset-btn" id="clearHistoryBtn">Clear History</button>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ═══════════════ ANALYZER ═══════════════ -->
+  <main class="layout" id="analyzerMode" style="display:none">
+    <div class="coming-soon">
+      <div class="cs-title">Analyzer</div>
+      <div class="cs-sub">Hand history analysis — coming soon</div>
+    </div>
+  </main>
+
+  <script src="drill.js"></script>
+  <script src="visualizer.js"></script>
+  <script src="editor.js"></script>
+</body>
+</html>

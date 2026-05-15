@@ -1,0 +1,11 @@
+{
+  "RFI": {
+    "UTG": {
+      "correct": 5,
+      "total": 5,
+      "timeouts": 0
+    }
+  },
+  "vs_RFI": {},
+  "vs_3bet": {}
+}

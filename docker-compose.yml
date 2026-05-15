@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  poker-trainer:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Эти папки монтируются напрямую с твоего компьютера
+      # Изменения в файлах видны сразу без пересборки
+      - ./data:/app/data
+      - ./static:/app/static
+      - ./stats.json:/app/stats.json
+      - ./history.json:/app/history.json
+      # Python-файлы монтируются для горячей перезагрузки
+      - ./main.py:/app/main.py
+      - ./drill_engine.py:/app/drill_engine.py
+      - ./range_engine.py:/app/range_engine.py
+    restart: unless-stopped
