@@ -160,13 +160,6 @@ async function drillLoadConfig(filename) {
   state.rangeData    = data;
   state.selectedFile = filename;
 }
-  const url = filename ? `/api/config?file=${encodeURIComponent(filename)}` : '/api/config';
-  const res  = await fetch(url);
-  if (!res.ok) return;
-  state.config = await res.json();
-  state.heroPos    = state.config.rfi_positions[0];
-  state.villainPos = null;
-}
 
 function drillRenderFormatSelectors() {
   const select    = document.getElementById('dDepthSelect');
@@ -762,3 +755,4 @@ async function clearHistory() {
 
 // ── START ─────────────────────────────────────────────
 boot();
+}
