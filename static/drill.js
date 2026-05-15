@@ -86,29 +86,80 @@ function getSlotArrays() {
 }
 
 // ── BOOT ─────────────────────────────────────────────
+// ── FETCH WITH TIMEOUT ───────────────────────────────
+async function fetchWithTimeout(url, options = {}, ms = 5000) {
+  const controller = new AbortController();
+  const timeout    = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timeout);
+    return res;
+  } catch (e) {
+    clearTimeout(timeout);
+    throw e;
+  }
+}
+window._fetchWithTimeout = fetchWithTimeout;
+
+// ── BOOT ─────────────────────────────────────────────
 async function boot() {
   try {
-    // Load file list
-    const listRes   = await fetch('/api/ranges/list');
-    state._allFiles = await listRes.json();
+    // Step 1: file list
+    try {
+      const listRes   = await fetchWithTimeout('/api/ranges/list');
+      const server    = await listRes.json();
+      state._allFiles = [...server, ...UserStorage.allFileEntries()];
+    } catch (e) {
+      console.warn('Could not load file list:', e);
+      state._allFiles = UserStorage.allFileEntries();
+    }
 
-    // Load config from default file
-    await drillLoadConfig('');
+    // Step 2: config
+    try {
+      await drillLoadConfig('');
+    } catch (e) {
+      console.warn('Could not load config:', e);
+    }
+
+    if (!state.config) {
+      console.error('Boot: no config loaded, aborting');
+      return;
+    }
 
     bindEvents();
     drillRenderFormatSelectors();
     renderHeroButtons();
     renderVillainSection();
     renderSeats();
-    await loadStats();
-    await loadHistory();
+
+    // Step 3: stats + history (non-blocking)
+    loadStats().catch(() => {});
+    loadHistory().catch(() => {});
+
+    // Step 4: first hand
     await newHand();
+
   } catch (e) {
     console.error('Boot failed:', e);
   }
 }
 
 async function drillLoadConfig(filename) {
+  let data;
+  if (!filename) {
+    const res = await fetchWithTimeout('/api/config');
+    data = await res.json();
+  } else if (filename.startsWith('user:')) {
+    data = UserStorage.load(filename.slice(5));
+    if (!data) throw new Error('User range not found: ' + filename);
+  } else {
+    const res = await fetchWithTimeout(`/api/config?file=${encodeURIComponent(filename)}`);
+    data = await res.json();
+  }
+  state.config       = data.config || data;
+  state.rangeData    = data;
+  state.selectedFile = filename;
+}
   const url = filename ? `/api/config?file=${encodeURIComponent(filename)}` : '/api/config';
   const res  = await fetch(url);
   if (!res.ok) return;
@@ -316,6 +367,10 @@ function renderVillainSection() {
 
 // ── TABLE RENDERING ───────────────────────────────────
 function renderSeats(context) {
+  const wrap = document.getElementById('seats');
+  wrap.innerHTML = '';
+
+function renderSeats(context) {
   const wrap      = document.getElementById('seats');
   wrap.innerHTML  = '';
   const positions = getPositions();
@@ -498,7 +553,6 @@ async function submitAnswer(action, isTimeout = false) {
         drill_hand:    state.drillHand,
         player_action: isTimeout ? 'fold' : action,
         is_timeout:    isTimeout,
-        file:            state.selectedFile || '',
       }),
     });
     const result = await res.json();
@@ -643,8 +697,13 @@ function clearAutoNext() {
 
 // ── REFRESH FILE LIST (called from editor after save) ─
 async function drillRefreshFileList() {
-  const res       = await fetch('/api/ranges/list');
-  state._allFiles = await res.json();
+  try {
+    const res    = await fetch('/api/ranges/list');
+    const server = await res.json();
+    state._allFiles = [...server, ...UserStorage.allFileEntries()];
+  } catch (e) {
+    state._allFiles = UserStorage.allFileEntries();
+  }
   drillRenderFormatSelectors();
 }
 

@@ -158,6 +158,12 @@
         <label class="control-label">Save</label>
         <input class="save-input" id="eSaveFilename" placeholder="e.g. mtt_8max_100bb" type="text">
         <button class="save-btn" id="eSaveBtn">Save Range</button>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="seg" id="eExportBtn" style="flex:1;font-size:10px;padding:6px 0" title="Download current range as JSON">⬇ Export</button>
+          <label class="seg" style="flex:1;font-size:10px;cursor:pointer;text-align:center;padding:6px 0;border-radius:5px" title="Upload JSON range">⬆ Import
+            <input type="file" id="eImportInput" accept=".json" style="display:none">
+          </label>
+        </div>
         <button class="reset-btn" id="eClearAllBtn">Clear All Hands</button>
       </div>
 
@@ -187,6 +193,7 @@
           <span class="mode-label">Depth</span>
           <select class="mini-select" id="vDepthSelect"></select>
         </div>
+        <button class="deal-btn" id="vRefreshBtn" style="margin-top:8px;font-size:11px;padding:8px">↻ Refresh Ranges</button>
       </div>
       <div class="control-group">
         <label class="control-label">Spot</label>
@@ -379,6 +386,7 @@
     </div>
   </main>
 
+  <script src="storage.js"></script>
   <script src="drill.js"></script>
   <script src="visualizer.js"></script>
   <script src="editor.js"></script>

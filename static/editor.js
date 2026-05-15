@@ -254,6 +254,41 @@ function editorBoot() {
   edBuildMatrix();
   edUpdateMatrix();
   edUpdateFilename();
+
+  // ── EXPORT ─────────────────────────────────────────
+  document.getElementById('eExportBtn')?.addEventListener('click', () => {
+    const name = (document.getElementById('eSaveFilename').value.trim()
+                  || document.getElementById('eSaveFilename').placeholder)
+                  .replace(/\.json$/, '');
+    // Save current state first, then export
+    const cfg = edPosConfig();
+    const rangeData = {
+      meta: { game_type: ed.gameType, table_size: ed.tableSize, stack_depth: ed.depth+'bb',
+              label: `${ed.gameType} ${ed.tableSize} ${ed.depth}bb` },
+      config: { positions: cfg.positions, rfi_positions: cfg.rfi,
+                vs_rfi_options: cfg.vs_rfi, vs_3bet_options: cfg.vs_3bet },
+      spots: ed.ranges,
+    };
+    UserStorage.save(name, rangeData);
+    UserStorage.exportFile(name);
+  });
+
+  // ── IMPORT ─────────────────────────────────────────
+  document.getElementById('eImportInput')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const filename = await UserStorage.importFile(file);
+      if (filename) {
+        if (typeof drillRefreshFileList === 'function') drillRefreshFileList();
+        if (typeof vizRefreshAfterSave  === 'function') vizRefreshAfterSave();
+        alert(`✓ Импортировано: ${filename}`);
+      }
+    } catch (err) {
+      alert('Ошибка импорта: ' + err.message);
+    }
+    e.target.value = '';
+  });
 }
 
 // ── EVENTS ────────────────────────────────────────────
@@ -513,16 +548,15 @@ function edShowHover(hand) {
   const range = edRangeKey();
   const value = range[hand];
 
-  if (!value) { el.textContent = `${hand}: empty — click to paint`; return; }
-
-  if (ed.spot === 'RFI') {
-    el.textContent = `${hand}: open ${Math.round(value * 100)}%`;
-  } else {
-    const parts = Object.entries(value)
-      .filter(([,f]) => f > 0)
-      .map(([a,f]) => `${a} ${Math.round(f*100)}%`);
-    el.textContent = `${hand}: ${parts.join(' / ')}`;
+  if (!value || Object.keys(value).length === 0) {
+    el.textContent = `${hand}: empty — click to paint`;
+    return;
   }
+
+  const parts = Object.entries(value)
+    .filter(([,f]) => f > 0)
+    .map(([a,f]) => `${a} ${Math.round(f*100)}%`);
+  el.textContent = `${hand}: ${parts.join(' / ')}`;
 }
 
 // ── STATS ─────────────────────────────────────────────
@@ -553,11 +587,61 @@ function edUpdateFilename() {
 
 // ── SAVE ──────────────────────────────────────────────
 async function edSave() {
-  const inputEl = document.getElementById('eSaveFilename');
-  const cfg     = edPosConfig();
+  const inputEl  = document.getElementById('eSaveFilename');
+  const cfg      = edPosConfig();
+  const rawName  = (inputEl.value.trim() || inputEl.placeholder).replace(/\.json$/, '');
 
-  const rawName  = inputEl.value.trim() || inputEl.placeholder;
-  const filename = rawName.endsWith('.json') ? rawName : rawName + '.json';
+  const rangeData = {
+    meta: {
+      game_type:   ed.gameType,
+      table_size:  ed.tableSize,
+      stack_depth: ed.depth + 'bb',
+      label:       `${ed.gameType} ${ed.tableSize} ${ed.depth}bb`,
+    },
+    config: {
+      positions:       cfg.positions,
+      rfi_positions:   cfg.rfi,
+      vs_rfi_options:  cfg.vs_rfi,
+      vs_3bet_options: cfg.vs_3bet,
+    },
+    spots: ed.ranges,
+  };
+
+  const saveBtn = document.getElementById('eSaveBtn');
+  saveBtn.textContent = 'Saving…';
+  saveBtn.disabled    = true;
+
+  const ok = UserStorage.save(rawName, rangeData);
+
+  if (ok) {
+    saveBtn.textContent       = '✓ Saved!';
+    saveBtn.style.background  = 'rgba(39,174,96,.25)';
+    saveBtn.style.borderColor = '#27ae60';
+    saveBtn.style.color       = '#2ecc71';
+    inputEl.value = '';
+
+    if (typeof drillRefreshFileList === 'function') drillRefreshFileList();
+    if (typeof vizRefreshAfterSave  === 'function') vizRefreshAfterSave();
+
+    setTimeout(() => {
+      saveBtn.textContent       = 'Save Range';
+      saveBtn.style.background  = '';
+      saveBtn.style.borderColor = '';
+      saveBtn.style.color       = '';
+      saveBtn.disabled          = false;
+    }, 2000);
+  } else {
+    saveBtn.textContent       = '✗ Error';
+    saveBtn.style.borderColor = '#e74c3c';
+    saveBtn.style.color       = '#e74c3c';
+    setTimeout(() => {
+      saveBtn.textContent       = 'Save Range';
+      saveBtn.style.borderColor = '';
+      saveBtn.style.color       = '';
+      saveBtn.disabled          = false;
+    }, 2000);
+  }
+}
 
   const rangeData = {
     meta: {
