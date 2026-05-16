@@ -755,4 +755,3 @@ async function clearHistory() {
 
 // ── START ─────────────────────────────────────────────
 boot();
-}
