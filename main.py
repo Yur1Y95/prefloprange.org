@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 import json
 import os
 import random as _random
@@ -14,8 +15,12 @@ from drill_engine import (
     get_drill_hand_vs_3bet,
     check_answer,
 )
+from postflop_api import router as postflop_router
+from equity_api import router as equity_router
 
 app = FastAPI(title="NLH Range Trainer")
+app.include_router(postflop_router)
+app.include_router(equity_router)
 
 BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR     = os.path.join(BASE_DIR, "data")
@@ -49,6 +54,22 @@ def _list_range_files() -> list:
     return files
 
 
+def _normalize_range_data(data: dict) -> dict:
+    """Some legacy files use the key ``ranges`` instead of ``spots``.
+    The frontend (visualizer, editor, drill hint) reads ``spots`` exclusively.
+    Mirror one onto the other so every consumer sees the same shape regardless
+    of which key the JSON file used."""
+    if not isinstance(data, dict):
+        return data
+    spots  = data.get("spots")
+    ranges = data.get("ranges")
+    if isinstance(spots, dict) and not isinstance(ranges, dict):
+        data["ranges"] = spots
+    elif isinstance(ranges, dict) and not isinstance(spots, dict):
+        data["spots"] = ranges
+    return data
+
+
 def _load_range(file: str = "") -> dict:
     if not file:
         files = _list_range_files()
@@ -59,7 +80,7 @@ def _load_range(file: str = "") -> dict:
     path = os.path.join(DATA_DIR, fn)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail=f"Range file not found: {fn}")
-    return load_range_file(path)
+    return _normalize_range_data(load_range_file(path))
 
 
 def load_stats() -> dict:
@@ -92,7 +113,7 @@ def load_history() -> list:
 
 def save_history(history: list):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history[-HISTORY_MAX:], f, indent=2, ensure_ascii=False)
+        json.dump(history[:HISTORY_MAX], f, indent=2, ensure_ascii=False)
 
 
 class AnswerRequest(BaseModel):
@@ -113,12 +134,21 @@ def get_ranges(file: str = Query("")):
 
 @app.get("/api/config")
 def get_config(file: str = Query("")):
+    """Return the full range file with sane defaults merged into config.
+
+    Previously this endpoint only returned the ``config`` dict plus a
+    ``spots: [...]`` *list* — but the drill stores the whole response in
+    ``state.rangeData`` and the Show Range hint then tries to read
+    ``state.rangeData.spots.RFI[pos]``. Returning a list there broke the
+    hint. Now we return the full normalized file so all consumers agree
+    on the shape.
+    """
     data = _load_range(file)
-    return {
+    cfg  = {
         "bb": 1.0, "sb": 0.5, "open_size": 2.5, "starting_stack": 100.0,
         **data.get("config", {}),
-        "spots": ["RFI", "vs_RFI", "vs_3bet"],
     }
+    return { **data, "config": cfg }
 
 
 @app.get("/api/drill/hand")
@@ -176,7 +206,21 @@ def submit_answer(request: AnswerRequest):
     update_stats(stats, dh.get("spot", ""), stats_key, result["correct"], result.get("is_timeout", False))
     save_stats(stats)
     history = load_history()
-    history.append({**dh, "player_action": request.player_action, "result": result})
+    entry = {
+        "ts":               datetime.now().strftime("%H:%M:%S"),
+        "spot":             dh.get("spot", ""),
+        "hero_position":    dh.get("hero_position", ""),
+        "villain_position": dh.get("villain_position"),
+        "hand":             dh.get("hand", ""),
+        "card1":            dh.get("card1", ""),
+        "card2":            dh.get("card2", ""),
+        "correct_action":   result.get("correct_action", ""),
+        "player_action":    result.get("player_action", request.player_action),
+        "correct":          result.get("correct", False),
+        "ev":               result.get("ev", 0),
+        "is_timeout":       result.get("is_timeout", False),
+    }
+    history.insert(0, entry)
     save_history(history)
     return result
 
@@ -194,7 +238,7 @@ def reset_stats():
 
 @app.get("/api/history")
 def get_history(limit: int = Query(50)):
-    return load_history()[-limit:]
+    return load_history()[:limit]
 
 
 @app.post("/api/history/clear")

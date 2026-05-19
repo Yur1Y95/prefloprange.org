@@ -16,6 +16,7 @@
       <button class="mode-tab" data-mode="editor">Editor</button>
       <button class="mode-tab" data-mode="visualizer">Visualizer</button>
       <button class="mode-tab active" data-mode="drill">Drill</button>
+      <button class="mode-tab" data-mode="postflop">Postflop</button>
       <button class="mode-tab" data-mode="analyzer">Analyzer</button>
     </div>
     <div class="session-pill" id="sessionPill">0 / 0 &nbsp;·&nbsp; —</div>
@@ -357,6 +358,7 @@
         <span class="fb-icon" id="fbIcon"></span>
         <span class="fb-msg"  id="fbMsg"></span>
         <span class="fb-ev"   id="fbEv"></span>
+        <button class="fb-hint" id="fbHint" style="display:none">Show Range</button>
         <button class="fb-next" id="fbNext">Next →</button>
       </div>
     </section>
@@ -378,6 +380,94 @@
     </aside>
   </main>
 
+  <!-- ═══════════════ POSTFLOP ═══════════════ -->
+  <main class="layout" id="postflopMode" style="display:none">
+
+    <aside class="panel panel-left">
+      <div class="control-group">
+        <label class="control-label">Villain Type</label>
+        <div class="seg-buttons" id="pfVillainBtns">
+          <button class="seg active" data-pfvt="">Random</button>
+          <button class="seg" data-pfvt="nit">Nit (tight passive)</button>
+          <button class="seg" data-pfvt="fish">Fish (passive)</button>
+          <button class="seg" data-pfvt="maniac">Maniac (aggro)</button>
+          <button class="seg" data-pfvt="reg">Regular (TAG)</button>
+          <button class="seg" data-pfvt="gto">GTO solver</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <label class="control-label">Street</label>
+        <div class="seg-buttons">
+          <button class="seg active" data-pfstreet="flop">Flop</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <label class="control-label">Options</label>
+        <label class="toggle-row">
+          <input type="checkbox" id="pfAutoNext">
+          <span class="toggle-track"></span>
+          <span class="toggle-text">Auto-next</span>
+        </label>
+      </div>
+      <button class="deal-btn" id="pfDealBtn">Deal Spot</button>
+    </aside>
+
+    <section class="table-section">
+      <div class="spot-line" id="pfSpotLine">Postflop · Cash</div>
+      <div id="pfVillainLine" style="font-size:11px;color:var(--text-mid);text-align:center;max-width:380px;line-height:1.4;margin-top:-6px;">—</div>
+      <div class="table-wrap" style="margin-top:60px;">
+        <div class="table-rim"></div>
+        <div class="table-felt">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:10px;z-index:3;">
+            <div class="hero-cards" id="pfBoard"></div>
+            <div class="pot-block">
+              <span class="pot-label">POT</span>
+              <span class="pot-value" id="pfPot">—</span>
+              <span class="pot-label" style="margin-top:4px;">TO CALL</span>
+              <span class="pot-value" style="font-size:14px;color:var(--text-mid);" id="pfToCall">—</span>
+            </div>
+          </div>
+        </div>
+        <div class="seats" id="pfSeats"></div>
+      </div>
+      <div class="hero-cards" id="pfHole"></div>
+      <div class="action-bar" id="pfActionBar">
+        <button class="seg" id="pfFold"
+          style="flex:1;padding:14px 0;font-size:15px">Fold</button>
+        <button class="seg" id="pfCall"
+          style="flex:1;padding:14px 0;font-size:15px">Call</button>
+      </div>
+      <div class="feedback-strip" id="pfFeedback" style="display:none">
+        <span class="fb-icon" id="pfFbIcon"></span>
+        <span class="fb-msg"  id="pfFbMsg"></span>
+        <span class="fb-ev"   id="pfFbEv"></span>
+        <button class="fb-next" id="pfFbNext">Next →</button>
+      </div>
+    </section>
+
+    <aside class="panel panel-right">
+      <div class="control-label" style="margin-bottom:8px">This Spot</div>
+      <div class="stat-row"><span class="stat-key">Your equity</span>
+        <span class="stat-val" id="pfEq">—</span></div>
+      <div class="stat-row"><span class="stat-key">Needed (pot odds)</span>
+        <span class="stat-val" id="pfNeed">—</span></div>
+      <div class="stat-row"><span class="stat-key">Correct play</span>
+        <span class="stat-val" id="pfCorrect">—</span></div>
+      <div class="control-label" style="margin:16px 0 8px">Session</div>
+      <div class="stat-row"><span class="stat-key">Correct</span>
+        <span class="stat-val" id="pfSessOk">0 / 0</span></div>
+      <div class="stat-row"><span class="stat-key">Accuracy</span>
+        <span class="stat-val" id="pfSessPct">—</span></div>
+
+      <div id="pfBreakdownWrap" style="display:none">
+        <div class="control-label" style="margin:18px 0 6px">Your hand</div>
+        <div id="pfHeroBreak" class="pf-break"></div>
+        <div class="control-label" style="margin:16px 0 6px">Villain range</div>
+        <div id="pfVillBreak" class="pf-break"></div>
+      </div>
+    </aside>
+  </main>
+
   <!-- ═══════════════ ANALYZER ═══════════════ -->
   <main class="layout" id="analyzerMode" style="display:none">
     <div class="coming-soon">
@@ -386,9 +476,26 @@
     </div>
   </main>
 
-  <script src="/static/storage.js"></script>
-  <script src="/static/drill.js"></script>
-  <script src="/static/visualizer.js"></script>
-  <script src="/static/editor.js"></script>
+  <!-- ═══════════════ HINT MODAL ═══════════════ -->
+  <div id="hintOverlay">
+    <div id="hintBackdrop"></div>
+    <div id="hintBox">
+      <div class="hint-head">
+        <span id="hintTitle">Range hint</span>
+        <button id="hintCloseBtn">✕</button>
+      </div>
+      <div class="hint-grid" id="hintGrid"></div>
+      <div class="hint-legend" id="hintLegend"></div>
+      <div class="hint-hand-note" id="hintHandNote"></div>
+    </div>
+  </div>
+
+  <!-- Cache-bust query params: bump the `v=` value when you change any JS
+       file so the browser fetches the new version instead of a stale copy. -->
+  <script src="/static/storage.js?v=20260519b"></script>
+  <script src="/static/drill.js?v=20260519b"></script>
+  <script src="/static/postflop.js?v=20260519b"></script>
+  <script src="/static/visualizer.js?v=20260519b"></script>
+  <script src="/static/editor.js?v=20260519b"></script>
 </body>
 </html>

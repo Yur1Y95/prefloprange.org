@@ -146,19 +146,51 @@ async function boot() {
 
 async function drillLoadConfig(filename) {
   let data;
-  if (!filename) {
-    const res = await fetchWithTimeout('/api/config');
-    data = await res.json();
-  } else if (filename.startsWith('user:')) {
+  if (filename && filename.startsWith('user:')) {
     data = UserStorage.load(filename.slice(5));
     if (!data) throw new Error('User range not found: ' + filename);
   } else {
-    const res = await fetchWithTimeout(`/api/config?file=${encodeURIComponent(filename)}`);
-    data = await res.json();
+    // Prefer /api/ranges — it always returns the full normalized file with
+    // a real `spots` dict. /api/config used to overwrite `spots` with a
+    // string list which broke the Show Range modal, so we fall back to it
+    // only if /api/ranges fails. (Falls back transparently for old servers.)
+    const url = filename
+      ? `/api/ranges?file=${encodeURIComponent(filename)}`
+      : '/api/ranges';
+    try {
+      const res = await fetchWithTimeout(url);
+      if (!res.ok) throw new Error('ranges endpoint not ok');
+      data = await res.json();
+    } catch (e) {
+      console.warn('Falling back to /api/config:', e);
+      const cfgUrl = filename
+        ? `/api/config?file=${encodeURIComponent(filename)}`
+        : '/api/config';
+      const res = await fetchWithTimeout(cfgUrl);
+      data = await res.json();
+    }
   }
   state.config       = data.config || data;
   state.rangeData    = data;
   state.selectedFile = filename;
+
+  // Defensive: if the server returned `spots` as a list (legacy /api/config
+  // shape), the Show Range modal would render empty. Surface a clear warning
+  // and try to recover from `data.ranges` (the legacy key) if present.
+  if (state.rangeData && !isPlainSpots(state.rangeData.spots)) {
+    if (isPlainSpots(state.rangeData.ranges)) {
+      console.warn('drillLoadConfig: spots missing/malformed, using ranges fallback.');
+      state.rangeData.spots = state.rangeData.ranges;
+    } else {
+      console.warn('drillLoadConfig: range data lacks a usable spots dict — '
+                 + 'Show Range will be empty. Restart the server so main.py reloads.');
+    }
+  }
+}
+
+function isPlainSpots(s) {
+  return s && typeof s === 'object' && !Array.isArray(s)
+      && (s.RFI || s.vs_RFI || s.vs_3bet);
 }
 
 function drillRenderFormatSelectors() {
@@ -231,7 +263,10 @@ function bindEvents() {
       document.getElementById('vizMode').style.display       = mode === 'visualizer' ? 'grid' : 'none';
       document.getElementById('analyzerMode').style.display  = mode === 'analyzer'   ? 'grid' : 'none';
       document.getElementById('editorMode').style.display    = mode === 'editor'     ? 'grid' : 'none';
+      const pfEl = document.getElementById('postflopMode');
+      if (pfEl) pfEl.style.display = mode === 'postflop' ? 'grid' : 'none';
       if (mode === 'visualizer') showVisualizer();
+      if (mode === 'postflop' && window.PostflopTrainer) window.PostflopTrainer.onShow();
     });
   });
 
@@ -290,8 +325,13 @@ function bindEvents() {
   document.getElementById('resetBtn').addEventListener('click', resetStats);
   document.getElementById('clearHistoryBtn').addEventListener('click', clearHistory);
 
-  // Keyboard shortcuts
+  // Hint modal
+  document.getElementById('fbHint').addEventListener('click', showHint);
+  document.getElementById('hintCloseBtn').addEventListener('click', closeHint);
+  document.getElementById('hintBackdrop').addEventListener('click', closeHint);
+  // Keyboard shortcuts (Escape closes hint, Space/Enter deals, f/c/o/r/4 answer)
   document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeHint(); return; }
     if (!state.waiting) {
       if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); newHand(); }
       return;
@@ -359,10 +399,6 @@ function renderVillainSection() {
 }
 
 // ── TABLE RENDERING ───────────────────────────────────
-function renderSeats(context) {
-  const wrap = document.getElementById('seats');
-  wrap.innerHTML = '';
-
 function renderSeats(context) {
   const wrap      = document.getElementById('seats');
   wrap.innerHTML  = '';
@@ -553,7 +589,10 @@ async function submitAnswer(action, isTimeout = false) {
     loadStats();
     loadHistory();
 
-    if (document.getElementById('autoNextToggle').checked) {
+    // Auto-next only fires on a correct answer. On a wrong answer the user
+    // needs time to inspect the range via "Show Range" — silently advancing
+    // would defeat the point of the hint button.
+    if (document.getElementById('autoNextToggle').checked && result.correct) {
       state.autoNext.id = setTimeout(newHand, 1400);
     }
   } catch (e) {
@@ -575,12 +614,254 @@ function showFeedback(result) {
   evEl.textContent  = (ev >= 0 ? '+' : '') + ev + ' BB';
   evEl.className    = 'fb-ev ' + (ev >= 0 ? 'pos' : 'neg');
 
+  document.getElementById('fbHint').style.display = result.correct ? 'none' : 'inline-block';
+
+  // Show the Next button when auto-next is off, OR when the answer is wrong
+  // (we paused auto-next on wrong answers so the user can read the range).
+  const autoOn = document.getElementById('autoNextToggle').checked;
   const nextBtn = document.getElementById('fbNext');
-  nextBtn.style.display = document.getElementById('autoNextToggle').checked ? 'none' : 'inline-block';
+  nextBtn.style.display = (autoOn && result.correct) ? 'none' : 'inline-block';
 }
 
 function hideFeedback() {
   document.getElementById('feedbackStrip').style.display = 'none';
+  document.getElementById('fbHint').style.display = 'none';
+}
+
+// ── HINT (Show Range modal) ───────────────────────────
+// Self-contained helpers so the modal renders independently of
+// visualizer.js / editor.js script-load order or parse errors.
+
+const HINT_RANKS     = ['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
+const HINT_RANKS_ASC = ['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
+
+function _hintRankVal(r) { return HINT_RANKS_ASC.indexOf(r); }
+
+function _hintNormalize(a, b, suffix) {
+  if (a === b) return a + b;
+  return _hintRankVal(a) > _hintRankVal(b) ? a + b + suffix : b + a + suffix;
+}
+
+function _hintExpandNotation(notation) {
+  notation = notation.trim();
+  if (notation.length === 2 && notation[0] === notation[1]) return [notation];
+  if (notation.length === 3 && 'so'.includes(notation[2])) return [notation];
+
+  // 55+
+  if (notation.length === 3 && notation[0] === notation[1] && notation[2] === '+') {
+    const start = _hintRankVal(notation[0]);
+    return HINT_RANKS_ASC.filter(r => _hintRankVal(r) >= start).map(r => r + r);
+  }
+  // A2s+ / A2o+
+  if (notation.length === 4 && notation[3] === '+') {
+    const hi = notation[0], lo = notation[1], sfx = notation[2];
+    const loVal = _hintRankVal(lo), hiVal = _hintRankVal(hi);
+    return HINT_RANKS_ASC
+      .filter(r => _hintRankVal(r) >= loVal && _hintRankVal(r) < hiVal)
+      .map(r => _hintNormalize(hi, r, sfx));
+  }
+  // ranges with dash
+  if (notation.includes('-')) {
+    const [start, end] = notation.split('-');
+    if (start.length === 2 && end.length === 2) {
+      const lo = Math.min(_hintRankVal(start[0]), _hintRankVal(end[0]));
+      const hi = Math.max(_hintRankVal(start[0]), _hintRankVal(end[0]));
+      return HINT_RANKS_ASC.filter(r => _hintRankVal(r) >= lo && _hintRankVal(r) <= hi).map(r => r + r);
+    }
+    if (start.length === 3 && end.length === 3) {
+      const hiCard = start[0], sfx = start[2];
+      const lo = Math.min(_hintRankVal(start[1]), _hintRankVal(end[1]));
+      const hi = Math.max(_hintRankVal(start[1]), _hintRankVal(end[1]));
+      return HINT_RANKS_ASC
+        .filter(r => _hintRankVal(r) >= lo && _hintRankVal(r) <= hi)
+        .map(r => _hintNormalize(hiCard, r, sfx));
+    }
+  }
+  return [];
+}
+
+function _hintExpandRFI(raw) {
+  const out = {};
+  for (const [notation, value] of Object.entries(raw || {})) {
+    for (const hand of _hintExpandNotation(notation)) {
+      if (value && typeof value === 'object') {
+        if (!out[hand]) out[hand] = {};
+        for (const [act, freq] of Object.entries(value)) {
+          out[hand][act] = Math.max(out[hand][act] || 0, freq);
+        }
+      } else {
+        out[hand] = Math.max(out[hand] || 0, value || 0);
+      }
+    }
+  }
+  return out;
+}
+
+function _hintExpandActions(raw) {
+  const out = {};
+  for (const [notation, actions] of Object.entries(raw || {})) {
+    for (const hand of _hintExpandNotation(notation)) {
+      if (!out[hand]) out[hand] = {};
+      for (const [act, freq] of Object.entries(actions || {})) {
+        out[hand][act] = Math.max(out[hand][act] || 0, freq);
+      }
+    }
+  }
+  return out;
+}
+
+function _hintRfiColor(freq) {
+  if (freq >= 1.0)  return ['#2E7D32', '#fff'];
+  if (freq >= 0.75) return ['#66BB6A', '#000'];
+  if (freq >= 0.5)  return ['#D4E157', '#000'];
+  if (freq >  0)    return ['#FFA726', '#000'];
+  return ['#1e2a22', '#3a5a44'];
+}
+
+function showHint() {
+  if (!state.drillHand) return;
+  const dh = state.drillHand;
+
+  const title = dh.villain_position
+    ? `${dh.spot} · ${dh.hero_position} vs ${dh.villain_position}`
+    : `${dh.spot} · ${dh.hero_position}`;
+  document.getElementById('hintTitle').textContent = title;
+
+  const { range, type } = getHintRange();
+
+  // Legend
+  const legend = document.getElementById('hintLegend');
+  if (type === 'RFI') {
+    legend.innerHTML = [
+      ['#2E7D32', '100% Open'], ['#66BB6A', '75%+'], ['#D4E157', '50%+'],
+      ['#FFA726', '<50%'], ['#1e2a22;border:1px solid #2a3a2a', 'Fold'],
+    ].map(([bg, label]) =>
+      `<div class="hint-legend-item"><div class="hint-legend-swatch" style="background:${bg}"></div>${label}</div>`
+    ).join('');
+  } else {
+    const isVs3bet = dh.spot === 'vs_3bet';
+    legend.innerHTML = [
+      [isVs3bet ? '#c0392b' : '#F44336', isVs3bet ? '4-Bet' : '3-Bet'],
+      ['#3F7FB5', 'Call'],
+      ['#1e2a22;border:1px solid #2a3a2a', 'Fold'],
+    ].map(([bg, label]) =>
+      `<div class="hint-legend-item"><div class="hint-legend-swatch" style="background:${bg}"></div>${label}</div>`
+    ).join('');
+  }
+
+  // Build 13×13 grid — force inline grid layout so it can't be broken by CSS issues
+  const grid = document.getElementById('hintGrid');
+  grid.innerHTML = '';
+  grid.style.display             = 'grid';
+  grid.style.gridTemplateColumns = 'repeat(13, 1fr)';
+  grid.style.gridTemplateRows    = 'repeat(13, 1fr)';
+  grid.style.gap                 = '3px';
+  grid.style.width               = '100%';
+  grid.style.aspectRatio         = '1 / 1';
+
+  for (let r = 0; r < 13; r++) {
+    for (let c = 0; c < 13; c++) {
+      const h = r === c ? HINT_RANKS[r]+HINT_RANKS[c]
+              : r < c   ? HINT_RANKS[r]+HINT_RANKS[c]+'s'
+              :           HINT_RANKS[c]+HINT_RANKS[r]+'o';
+
+      const cell = document.createElement('div');
+      cell.className     = 'matrix-cell';
+      cell.dataset.hand  = h;
+
+      // Inline backup styles in case .matrix-cell CSS isn't applied
+      cell.style.aspectRatio    = '1 / 1';
+      cell.style.display        = 'flex';
+      cell.style.alignItems     = 'center';
+      cell.style.justifyContent = 'center';
+      cell.style.borderRadius   = '4px';
+      cell.style.border         = '1px solid rgba(255,255,255,.06)';
+      cell.style.overflow       = 'hidden';
+      cell.style.position       = 'relative';
+      cell.style.minWidth       = '0';
+      cell.style.minHeight      = '0';
+
+      if (h === dh.hand) cell.classList.add('hint-cell-current');
+      colorHintCell(cell, range[h], type, dh.spot);
+
+      const label = document.createElement('span');
+      label.className   = 'cell-label';
+      label.textContent = h;
+      label.style.fontFamily    = 'var(--font-ui, system-ui, sans-serif)';
+      label.style.fontSize      = 'clamp(7px, 1vw, 11px)';
+      label.style.fontWeight    = '700';
+      label.style.letterSpacing = '.3px';
+      label.style.pointerEvents = 'none';
+      label.style.position      = 'relative';
+      label.style.zIndex        = '1';
+      label.style.textShadow    = '0 1px 3px rgba(0,0,0,.7)';
+      cell.appendChild(label);
+      grid.appendChild(cell);
+    }
+  }
+
+  document.getElementById('hintHandNote').innerHTML =
+    `Dealt hand: <strong style="color:var(--gold);font-size:13px">${dh.hand}</strong>` +
+    ` &nbsp;·&nbsp; ${dh.card1} ${dh.card2}`;
+
+  document.getElementById('hintOverlay').classList.add('open');
+}
+
+function closeHint() {
+  document.getElementById('hintOverlay').classList.remove('open');
+}
+
+function getHintRange() {
+  if (!state.rangeData?.spots) return { range: {}, type: 'RFI' };
+  const spots = state.rangeData.spots;
+  const dh    = state.drillHand;
+  if (dh.spot === 'RFI') {
+    return { range: _hintExpandRFI(spots.RFI?.[dh.hero_position] || {}), type: 'RFI' };
+  }
+  const key = `vs_${dh.villain_position}`;
+  if (dh.spot === 'vs_RFI') {
+    return { range: _hintExpandActions(spots.vs_RFI?.[dh.hero_position]?.[key] || {}), type: 'vs' };
+  }
+  if (dh.spot === 'vs_3bet') {
+    return { range: _hintExpandActions(spots.vs_3bet?.[dh.hero_position]?.[key] || {}), type: 'vs' };
+  }
+  return { range: {}, type: 'RFI' };
+}
+
+function colorHintCell(cell, value, type, spot) {
+  if (value == null || (typeof value === 'object' && Object.keys(value).length === 0)) {
+    cell.style.background = '#1e2a22';
+    cell.style.color      = '#3a5a44';
+    return;
+  }
+
+  if (type === 'RFI') {
+    if (typeof value === 'number') {
+      const [bg, fg] = _hintRfiColor(value);
+      cell.style.background = bg;
+      cell.style.color      = fg;
+    } else {
+      cell.style.background = _hintGradient(value, { open:'#2E7D32', call:'#3F7FB5', fold:'#232b26' }, ['open','call','fold']);
+      cell.style.color      = '#fff';
+    }
+  } else {
+    const colors = { '3bet':'#F44336', call:'#3F7FB5', '4bet':'#c0392b', fold:'#232b26' };
+    const order  = spot === 'vs_3bet' ? ['4bet','call','fold'] : ['3bet','call','fold'];
+    cell.style.background = _hintGradient(value, colors, order);
+    cell.style.color      = '#fff';
+  }
+}
+
+function _hintGradient(value, colorMap, order) {
+  let cum = 0; const stops = [];
+  for (const a of order) {
+    const isLast = a === order[order.length - 1];
+    const f = value[a] ?? (isLast ? Math.max(0, 1 - Object.values(value).reduce((s,v)=>s+v, 0)) : 0);
+    if (f <= 0) continue;
+    stops.push(`${colorMap[a]||'#333'} ${Math.round(cum*100)}% ${Math.round((cum+f)*100)}%`);
+    cum += f;
+  }
+  return stops.length ? `linear-gradient(to right,${stops.join(',')})` : '#1e2a22';
 }
 
 // ── SPOT LINE ─────────────────────────────────────────

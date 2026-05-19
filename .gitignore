@@ -1,0 +1,27 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor / IDE local config
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code local overrides
+.claude/settings.local.json
+
+# Local runtime artefacts (uncomment if you'd rather keep these out of git)
+# stats.json
+# history.json

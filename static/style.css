@@ -1110,3 +1110,209 @@ body {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #2a3a2a; border-radius: 2px; }
+/* ── POSTFLOP BOARD CARDS (smaller, fit inside table oval) ─ */
+#pfBoard { gap: 8px; }
+#pfBoard .card { width: 48px; height: 68px; }
+#pfBoard .card-corner { font-size: 11px; }
+#pfBoard .card-center { font-size: 24px; }
+
+/* ── POSTFLOP BREAKDOWN (equity.poker-style range composition) ─ */
+.pf-break { display: flex; flex-direction: column; gap: 3px; }
+.pf-break-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  position: relative;
+  padding: 3px 6px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.pf-break-row .pf-bar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: var(--gold-dim);
+  z-index: 0;
+}
+.pf-break-row.is-draw .pf-bar { background: rgba(63,127,181,.18); }
+.pf-break-row .pf-lbl,
+.pf-break-row .pf-num { position: relative; z-index: 1; }
+.pf-break-row .pf-lbl { color: var(--text); }
+.pf-break-row .pf-num {
+  color: var(--text-mid);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.pf-break-empty {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 3px 6px;
+}
+/* ── SHOW RANGE BUTTON (feedback strip) ─────────────────── */
+.fb-hint {
+  padding: 5px 16px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(201,168,76,.55);
+  background: rgba(201,168,76,.12);
+  color: var(--gold);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, box-shadow .15s;
+  flex-shrink: 0;
+}
+.fb-hint:hover {
+  background: rgba(201,168,76,.25);
+  border-color: var(--gold);
+  box-shadow: 0 0 10px rgba(201,168,76,.3);
+}
+
+/* ── HINT MODAL ──────────────────────────────────────────── */
+#hintOverlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+#hintOverlay.open { display: flex; }
+#hintBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.82);
+  cursor: pointer;
+}
+#hintBox {
+  position: relative;
+  background: #060d08;
+  border: 1px solid rgba(201,168,76,.28);
+  border-radius: 16px;
+  padding: 16px 18px 16px;
+  width: min(720px, calc(100vw - 24px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  box-shadow: 0 28px 90px rgba(0,0,0,.98);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Title row — compact, with close btn overlaid top-right */
+.hint-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+}
+#hintTitle {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+#hintCloseBtn {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.10);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  transition: .15s;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+#hintCloseBtn:hover { color: #fff; background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.22); }
+
+/* 13×13 grid — dominant element */
+.hint-grid,
+#hintGrid {
+  display: grid !important;
+  grid-template-columns: repeat(13, 1fr) !important;
+  grid-template-rows: repeat(13, 1fr) !important;
+  gap: 3px !important;
+  width: 100% !important;
+  aspect-ratio: 1 / 1 !important;
+  background: #050a07;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.04);
+  box-sizing: border-box;
+}
+/* Reuse .matrix-cell; disable hover effects in hint context */
+#hintGrid .matrix-cell {
+  cursor: default;
+  border-radius: 4px;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  background: #1e2a22;
+  border: 1px solid rgba(255,255,255,.06);
+  overflow: hidden;
+  position: relative;
+}
+#hintGrid .matrix-cell:hover {
+  filter: brightness(1.15);
+  transform: none;
+  border-color: rgba(255,255,255,.18);
+  z-index: 2;
+}
+#hintGrid .matrix-cell .cell-label {
+  font-family: var(--font-ui, system-ui, sans-serif);
+  font-size: clamp(8px, 0.95vw, 12px);
+  font-weight: 700;
+  letter-spacing: .2px;
+  pointer-events: none;
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 1px 3px rgba(0,0,0,.7);
+}
+
+/* Red glow on the dealt hand */
+.hint-cell-current {
+  outline: 2.5px solid #e74c3c !important;
+  outline-offset: -1px;
+  box-shadow: 0 0 14px rgba(231,76,60,.8), 0 0 28px rgba(231,76,60,.4) !important;
+  z-index: 2;
+  border-color: #e74c3c !important;
+}
+
+/* Legend row — compact, below the grid */
+.hint-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.hint-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-mid);
+  font-family: var(--font-ui);
+  letter-spacing: .5px;
+}
+.hint-legend-swatch {
+  width: 11px; height: 11px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.hint-hand-note {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--text-mid);
+  text-align: center;
+}

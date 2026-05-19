@@ -16,4 +16,9 @@ services:
       - ./main.py:/app/main.py
       - ./drill_engine.py:/app/drill_engine.py
       - ./range_engine.py:/app/range_engine.py
+      - ./equity.py:/app/equity.py
+      - ./decision.py:/app/decision.py
+      - ./postflop_engine.py:/app/postflop_engine.py
+      - ./postflop_api.py:/app/postflop_api.py
+      - ./equity_api.py:/app/equity_api.py
     restart: unless-stopped
