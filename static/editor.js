@@ -28,6 +28,10 @@ const ed = {
   tableSize: '8max',
   depth:     '100',
 
+  // Loaded file tracking (null = new, unsaved range)
+  loadedFrom: null,   // full key: "user:name" or "server:name.json"
+  loadedName: null,   // bare name used for save/display
+
   // Spot config
   spot:       'RFI',
   heroPos:    'UTG',
@@ -255,6 +259,13 @@ function editorBoot() {
   edUpdateMatrix();
   edUpdateFilename();
 
+  // Load Range section
+  edPopulateLoadDropdown();
+  document.getElementById('eLoadBtn')?.addEventListener('click', edLoadRange);
+
+  // Save-overwrite button (visible only when a file is loaded)
+  document.getElementById('eSaveCurrentBtn')?.addEventListener('click', edSaveCurrent);
+
   // ── EXPORT ─────────────────────────────────────────
   document.getElementById('eExportBtn')?.addEventListener('click', () => {
     const name = (document.getElementById('eSaveFilename').value.trim()
@@ -282,6 +293,7 @@ function editorBoot() {
       if (filename) {
         if (typeof drillRefreshFileList === 'function') drillRefreshFileList();
         if (typeof vizRefreshAfterSave  === 'function') vizRefreshAfterSave();
+        edPopulateLoadDropdown();
         alert(`✓ Импортировано: ${filename}`);
       }
     } catch (err) {
@@ -573,10 +585,11 @@ function edUpdateStats() {
     combos += cnt * Math.min(1, total);
   }
 
+  const pct = (combos / TOTAL_COMBOS * 100).toFixed(1);
   document.getElementById('eCombos').textContent = combos.toFixed(0);
-  document.getElementById('ePct').textContent    = (combos / TOTAL_COMBOS * 100).toFixed(1) + '%';
+  document.getElementById('ePct').textContent    = pct + '%';
   document.getElementById('editorStatus').textContent =
-    `${ed.spot} · ${ed.heroPos}${ed.villainPos ? ' vs ' + ed.villainPos : ''} · ${combos.toFixed(0)} combos`;
+    `${ed.spot} · ${ed.heroPos}${ed.villainPos ? ' vs ' + ed.villainPos : ''} · ${Math.round(combos)} combos · ${pct}%`;
 }
 
 // ── AUTO FILENAME ─────────────────────────────────────
@@ -585,13 +598,11 @@ function edUpdateFilename() {
   document.getElementById('eSaveFilename').placeholder = fn;
 }
 
-// ── SAVE ──────────────────────────────────────────────
-async function edSave() {
-  const inputEl  = document.getElementById('eSaveFilename');
-  const cfg      = edPosConfig();
-  const rawName  = (inputEl.value.trim() || inputEl.placeholder).replace(/\.json$/, '');
+// ── SAVE HELPERS ─────────────────────────────────────
 
-  const rangeData = {
+function _edBuildRangeData() {
+  const cfg = edPosConfig();
+  return {
     meta: {
       game_type:   ed.gameType,
       table_size:  ed.tableSize,
@@ -606,40 +617,98 @@ async function edSave() {
     },
     spots: ed.ranges,
   };
+}
 
-  const saveBtn = document.getElementById('eSaveBtn');
-  saveBtn.textContent = 'Saving…';
-  saveBtn.disabled    = true;
+/** Core save — persists to localStorage and animates the given button. */
+function _edDoSave(rawName, btn, defaultLabel) {
+  btn.textContent = 'Saving…';
+  btn.disabled    = true;
 
-  const ok = UserStorage.save(rawName, rangeData);
+  const ok = UserStorage.save(rawName, _edBuildRangeData());
 
   if (ok) {
-    saveBtn.textContent       = '✓ Saved!';
-    saveBtn.style.background  = 'rgba(39,174,96,.25)';
-    saveBtn.style.borderColor = '#27ae60';
-    saveBtn.style.color       = '#2ecc71';
-    inputEl.value = '';
+    btn.textContent       = '✓ Saved!';
+    btn.style.background  = 'rgba(39,174,96,.25)';
+    btn.style.borderColor = '#27ae60';
+    btn.style.color       = '#2ecc71';
 
     if (typeof drillRefreshFileList === 'function') drillRefreshFileList();
     if (typeof vizRefreshAfterSave  === 'function') vizRefreshAfterSave();
+    edPopulateLoadDropdown();
 
     setTimeout(() => {
-      saveBtn.textContent       = 'Save Range';
-      saveBtn.style.background  = '';
-      saveBtn.style.borderColor = '';
-      saveBtn.style.color       = '';
-      saveBtn.disabled          = false;
+      btn.textContent       = defaultLabel;
+      btn.style.background  = '';
+      btn.style.borderColor = '';
+      btn.style.color       = '';
+      btn.disabled          = false;
     }, 2000);
   } else {
-    saveBtn.textContent       = '✗ Error';
-    saveBtn.style.borderColor = '#e74c3c';
-    saveBtn.style.color       = '#e74c3c';
+    btn.textContent       = '✗ Error';
+    btn.style.borderColor = '#e74c3c';
+    btn.style.color       = '#e74c3c';
     setTimeout(() => {
-      saveBtn.textContent       = 'Save Range';
-      saveBtn.style.borderColor = '';
-      saveBtn.style.color       = '';
-      saveBtn.disabled          = false;
+      btn.textContent       = defaultLabel;
+      btn.style.borderColor = '';
+      btn.style.color       = '';
+      btn.disabled          = false;
     }, 2000);
+  }
+
+  return ok;
+}
+
+// ── UPDATE SAVE UI ────────────────────────────────────
+/**
+ * Switches the save section between two modes:
+ *  - "overwrite" mode (file loaded): prominent "Save «name»" + muted "Save as new"
+ *  - "new" mode (no file loaded): just the name input + "Save Range" button
+ */
+function edUpdateSaveUI() {
+  const wrap      = document.getElementById('eSaveCurrentWrap');
+  const overBtn   = document.getElementById('eSaveCurrentBtn');
+  const saveBtn   = document.getElementById('eSaveBtn');
+  const inputEl   = document.getElementById('eSaveFilename');
+
+  if (ed.loadedName) {
+    // Overwrite mode
+    wrap.style.display      = 'flex';
+    wrap.style.flexDirection = 'column';
+    overBtn.textContent     = `💾 Save «${ed.loadedName}»`;
+    saveBtn.textContent     = 'Save as new range';
+    saveBtn.classList.add('save-btn-secondary');
+    inputEl.placeholder     = 'new range name…';
+  } else {
+    // New range mode
+    wrap.style.display  = 'none';
+    saveBtn.textContent = 'Save Range';
+    saveBtn.classList.remove('save-btn-secondary');
+    edUpdateFilename();   // restore auto-generated placeholder
+  }
+}
+
+// ── SAVE (overwrite loaded file) ──────────────────────
+function edSaveCurrent() {
+  if (!ed.loadedName) return;
+  const btn = document.getElementById('eSaveCurrentBtn');
+  _edDoSave(ed.loadedName, btn, `💾 Save «${ed.loadedName}»`);
+}
+
+// ── SAVE (new name / first save) ─────────────────────
+function edSave() {
+  const inputEl = document.getElementById('eSaveFilename');
+  const rawName = (inputEl.value.trim() || inputEl.placeholder).replace(/\.json$/, '');
+  const btn     = document.getElementById('eSaveBtn');
+  const label   = btn.textContent;   // preserve current label for restore
+
+  const ok = _edDoSave(rawName, btn, label);
+
+  if (ok) {
+    inputEl.value   = '';
+    // This range is now "loaded" under the new name
+    ed.loadedFrom   = 'user:' + rawName;
+    ed.loadedName   = rawName;
+    edUpdateSaveUI();
   }
 }
 
@@ -658,6 +727,160 @@ function showEditor() {
   document.getElementById('vizMode').style.display       = 'none';
   document.getElementById('analyzerMode').style.display  = 'none';
   document.getElementById('editorMode').style.display    = 'grid';
+}
+
+// ── LOAD RANGE ────────────────────────────────────────
+
+/** Populate the Load dropdown from server + localStorage */
+async function edPopulateLoadDropdown() {
+  const sel = document.getElementById('eLoadSelect');
+  if (!sel) return;
+
+  sel.innerHTML = '<option value="">— select file —</option>';
+
+  // Server files
+  try {
+    const res   = await fetch('/api/ranges/list');
+    if (res.ok) {
+      const files = await res.json();           // [{filename, label, ...}]
+      if (files.length) {
+        const grp = document.createElement('optgroup');
+        grp.label = '📂 Server ranges';
+        files.forEach(f => {
+          const opt = document.createElement('option');
+          opt.value       = 'server:' + f.filename;
+          opt.textContent = f.label || f.filename;
+          grp.appendChild(opt);
+        });
+        sel.appendChild(grp);
+      }
+    }
+  } catch (_) { /* server unreachable — skip */ }
+
+  // User (localStorage) files
+  const userEntries = UserStorage.allFileEntries();
+  if (userEntries.length) {
+    const grp = document.createElement('optgroup');
+    grp.label = '★ My saved ranges';
+    userEntries.forEach(f => {
+      const opt = document.createElement('option');
+      // f.filename is already "user:<name>"
+      opt.value       = f.filename;
+      opt.textContent = f.label || f.filename;
+      grp.appendChild(opt);
+    });
+    sel.appendChild(grp);
+  }
+}
+
+/** Load the selected file into the editor */
+async function edLoadRange() {
+  const sel    = document.getElementById('eLoadSelect');
+  const val    = sel?.value;
+  if (!val) return;
+
+  const btn    = document.getElementById('eLoadBtn');
+  const status = document.getElementById('eLoadStatus');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  status.textContent = '';
+  status.className   = 'load-status';
+
+  try {
+    let data;
+
+    if (val.startsWith('user:')) {
+      // localStorage
+      const name = val.slice('user:'.length);
+      data = UserStorage.load(name);
+      if (!data) throw new Error('File not found in local storage');
+    } else {
+      // server — val is "server:<filename>", strip prefix
+      const filename = val.slice('server:'.length);
+      const res = await fetch(`/api/ranges?file=${encodeURIComponent(filename)}`);
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      data = await res.json();
+    }
+
+    edApplyLoadedData(data, val);
+
+    status.textContent = '✓ Loaded';
+    status.className   = 'load-status ok';
+    setTimeout(() => { status.textContent = ''; status.className = 'load-status'; }, 2500);
+
+  } catch (err) {
+    status.textContent = '✗ ' + err.message;
+    status.className   = 'load-status err';
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Load';
+  }
+}
+
+/**
+ * Apply a loaded range file object into the editor state.
+ * data shape: { meta: {...}, config: {...}, spots: { RFI:{}, vs_RFI:{}, vs_3bet:{} } }
+ */
+function edApplyLoadedData(data, sourceKey) {
+  if (!data) throw new Error('Empty data');
+
+  // ── 1. Sync meta → ed state ───────────────────────
+  const meta = data.meta || {};
+
+  if (meta.game_type) {
+    ed.gameType = meta.game_type;
+    const gt = document.getElementById('eGameType');
+    if (gt) gt.value = ed.gameType;
+  }
+
+  if (meta.table_size) {
+    ed.tableSize = meta.table_size;
+    const ts = document.getElementById('eTableSize');
+    if (ts) ts.value = ed.tableSize;
+  }
+
+  if (meta.stack_depth) {
+    // Normalise "100bb" → "100", "100 BB" → "100"
+    const depth = parseInt(meta.stack_depth);
+    if (!isNaN(depth)) {
+      ed.depth = String(depth);
+      const dp = document.getElementById('eDepth');
+      if (dp) dp.value = ed.depth;
+    }
+  }
+
+  // ── 2. Deep-copy spots into ed.ranges ─────────────
+  const spots = data.spots || {};
+  ed.ranges = {
+    RFI:    JSON.parse(JSON.stringify(spots.RFI    || {})),
+    vs_RFI: JSON.parse(JSON.stringify(spots.vs_RFI || {})),
+    vs_3bet: JSON.parse(JSON.stringify(spots.vs_3bet || {})),
+  };
+
+  // ── 3. Reset spot / position to safe defaults ──────
+  ed.spot = 'RFI';
+  document.querySelectorAll('[data-espot]').forEach(b => {
+    b.classList.toggle('active', b.dataset.espot === 'RFI');
+  });
+
+  const cfg = edPosConfig();
+  ed.heroPos    = cfg.rfi[0];
+  ed.villainPos = null;
+
+  // ── 4. Track loaded file for overwrite-save ──────────
+  if (sourceKey) {
+    const bare        = sourceKey.replace(/^(server:|user:)/, '').replace(/\.json$/, '');
+    ed.loadedFrom     = sourceKey;
+    ed.loadedName     = bare;
+  } else {
+    ed.loadedFrom     = null;
+    ed.loadedName     = null;
+  }
+
+  edRenderControls();
+  edBuildMatrix();
+  edUpdateMatrix();
+  edUpdateSaveUI();   // switch save section to overwrite mode
 }
 
 // ── BOOT ─────────────────────────────────────────────

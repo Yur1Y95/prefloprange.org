@@ -58,6 +58,15 @@
       </div>
 
       <div class="control-group">
+        <label class="control-label">Load Range</label>
+        <select class="mini-select" id="eLoadSelect" style="width:100%;margin-bottom:6px">
+          <option value="">— select file —</option>
+        </select>
+        <button class="save-btn" id="eLoadBtn" style="width:100%;margin-bottom:0">Load</button>
+        <div class="load-status" id="eLoadStatus"></div>
+      </div>
+
+      <div class="control-group">
         <label class="control-label">Spot</label>
         <div class="seg-buttons" id="eSpotBtns">
           <button class="seg active" data-espot="RFI">RFI</button>
@@ -157,8 +166,16 @@
 
       <div class="save-section">
         <label class="control-label">Save</label>
+
+        <!-- Overwrite section — visible only when a file is loaded -->
+        <div id="eSaveCurrentWrap" style="display:none">
+          <button class="save-btn" id="eSaveCurrentBtn">💾 Save «…»</button>
+          <div class="save-copy-sep">or save as new range:</div>
+        </div>
+
+        <!-- New name input + save button -->
         <input class="save-input" id="eSaveFilename" placeholder="e.g. mtt_8max_100bb" type="text">
-        <button class="save-btn" id="eSaveBtn">Save Range</button>
+        <button class="save-btn save-btn-secondary" id="eSaveBtn">Save Range</button>
         <div style="display:flex;gap:6px;margin-top:6px">
           <button class="seg" id="eExportBtn" style="flex:1;font-size:10px;padding:6px 0" title="Download current range as JSON">⬇ Export</button>
           <label class="seg" style="flex:1;font-size:10px;cursor:pointer;text-align:center;padding:6px 0;border-radius:5px" title="Upload JSON range">⬆ Import

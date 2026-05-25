@@ -1022,6 +1022,53 @@ body {
   transition: .15s;
 }
 .save-btn:hover { background: rgba(201,168,76,.28); }
+.save-btn:disabled { opacity: .45; cursor: default; }
+
+/* Secondary save-as-new button — muted gold outline */
+.save-btn-secondary {
+  border-color: rgba(201,168,76,.4);
+  background: transparent;
+  color: rgba(201,168,76,.7);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  padding: 8px;
+}
+.save-btn-secondary:hover { background: rgba(201,168,76,.12); border-color: var(--gold); color: var(--gold); }
+
+/* Separator between overwrite and save-as-new */
+.save-copy-sep {
+  font-family: var(--font-ui);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: center;
+  margin: 8px 0 6px;
+  position: relative;
+}
+.save-copy-sep::before,
+.save-copy-sep::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 22%;
+  height: 1px;
+  background: rgba(255,255,255,.08);
+}
+.save-copy-sep::before { left: 0; }
+.save-copy-sep::after  { right: 0; }
+
+/* Load status message */
+.load-status {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  letter-spacing: .5px;
+  min-height: 14px;
+  text-align: center;
+  transition: opacity .3s;
+}
+.load-status.ok   { color: #27ae60; }
+.load-status.err  { color: #e74c3c; }
 
 /* depth/format selectors reuse mini-select */
 .meta-row {

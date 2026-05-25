@@ -25,3 +25,7 @@ Thumbs.db
 # Local runtime artefacts (uncomment if you'd rather keep these out of git)
 # stats.json
 # history.json
+
+# Large hand-history data (too big for GitHub, kept local only)
+parsed/
+hand_history_archives/
