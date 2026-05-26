@@ -243,6 +243,23 @@ def test_full_session_flow():
     print(f"  PASS  full flow: answered 1 card, deck now new=596 (was 597)")
 
 
+def test_path_traversal_rejected():
+    """
+    Crafted ``file`` values that try to escape DATA_DIR / SRS_DIR must be
+    refused with 400 — never silently resolve to a path outside our sandbox.
+    """
+    bad_paths = [
+        "../../etc/passwd",   # classic dot-dot escape
+        "../outside",         # one level up
+        "/etc/passwd",        # absolute path (os.path.join would discard the base)
+    ]
+    for p in bad_paths:
+        r = client.get("/api/srs/status", params={"file": p})
+        assert r.status_code == 400, \
+            f"{p!r}: expected 400, got {r.status_code}: {r.text}"
+    print(f"  PASS  path traversal blocked for {len(bad_paths)} crafted inputs")
+
+
 if __name__ == "__main__":
     import sys
     tests = [(k, v) for k, v in globals().items()

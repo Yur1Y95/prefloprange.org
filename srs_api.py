@@ -46,15 +46,34 @@ def _ensure_srs_dir() -> None:
     Path(SRS_DIR).mkdir(parents=True, exist_ok=True)
 
 
+def _safe_path_in(base_dir: str, filename: str) -> str:
+    """
+    Resolve ``filename`` under ``base_dir`` and refuse anything that escapes
+    the directory (path traversal via ``..``, absolute paths, symlinks).
+
+    ``realpath`` collapses ``..`` and follows symlinks on both sides so the
+    containment check is correct even when ``base_dir`` itself is a symlink.
+    """
+    base_real = os.path.realpath(base_dir)
+    candidate = os.path.realpath(os.path.join(base_dir, filename))
+    # Containment check: candidate must equal base or live strictly below it.
+    if candidate != base_real and not candidate.startswith(base_real + os.sep):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file path (outside allowed directory): {filename}",
+        )
+    return candidate
+
+
 def _state_path_for(range_file: str) -> str:
     """Map a range file name (with or without .json) to its SRS state path."""
     stem = range_file[:-5] if range_file.endswith(".json") else range_file
-    return os.path.join(SRS_DIR, f"{stem}.srs.json")
+    return _safe_path_in(SRS_DIR, f"{stem}.srs.json")
 
 
 def _range_path_for(range_file: str) -> str:
     fn = range_file if range_file.endswith(".json") else f"{range_file}.json"
-    return os.path.join(DATA_DIR, fn)
+    return _safe_path_in(DATA_DIR, fn)
 
 
 def _load_range_spots(range_file: str) -> dict:

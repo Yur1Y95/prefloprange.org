@@ -15,7 +15,7 @@ debugging.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, field, asdict
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -53,7 +53,9 @@ class Card:
     #   RFI:     {"open": ..., "fold": ...}
     #   vs_RFI:  {"call": ..., "3bet": ..., "fold": ...}
     #   vs_3bet: {"call": ..., "4bet": ..., "fold": ...}
-    correct_strategy: dict[str, float] = None  # type: ignore[assignment]
+    # default_factory=dict avoids the mutable-default trap; in practice the
+    # dict is always populated by _make_card() or load_state().
+    correct_strategy: dict[str, float] = field(default_factory=dict)
 
     # SRS scheduling state
     ease_factor: float = DEFAULT_EASE
@@ -270,7 +272,14 @@ def get_due_cards(
     """
     Returns cards to drill today, in priority order:
       1. Reviews due today or earlier (next_review <= today)
-      2. New cards, up to ``new_limit``
+      2. New cards, capped so we never introduce more than ``new_limit``
+         in a single day across the whole deck
+
+    Per-day enforcement is derived from card state rather than stored
+    separately: a card with ``last_seen == today AND total_seen == 1`` was
+    introduced today (its first ever review happened today). We subtract
+    that count from ``new_limit`` to get the remaining slots for fresh
+    cards. No schema change needed.
     """
     if today is None:
         today = date.today()
@@ -280,7 +289,13 @@ def get_due_cards(
         c for c in cards
         if not c.is_new() and c.next_review and c.next_review <= today_str
     ]
-    new_cards = [c for c in cards if c.is_new()][:new_limit]
+
+    introduced_today = sum(
+        1 for c in cards
+        if c.last_seen == today_str and c.total_seen == 1
+    )
+    remaining_new_slots = max(0, new_limit - introduced_today)
+    new_cards = [c for c in cards if c.is_new()][:remaining_new_slots]
 
     return due_reviews + new_cards
 

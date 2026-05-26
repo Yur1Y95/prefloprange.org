@@ -348,6 +348,67 @@ def test_due_mixes_reviews_and_new():
     assert len(due) == 4
 
 
+def test_due_per_day_limit_persists_across_calls():
+    """
+    NEW_CARDS_PER_DAY is a daily cap, not a per-call cap. Once 15 fresh cards
+    have been introduced today, subsequent calls must return 0 new cards even
+    if untouched cards remain in the deck.
+    """
+    # 15 cards that look like "introduced today" (one review, today)
+    introduced = []
+    for i in range(15):
+        c = Card(hand=f"H{i}", position="UTG", spot="RFI",
+                 correct_strategy={"open": 1.0, "fold": 0.0})
+        srs.update_card(c, GOOD, today=TODAY)   # total_seen=1, last_seen=TODAY
+        introduced.append(c)
+
+    # 10 untouched cards in the same deck
+    untouched = [
+        Card(hand=f"X{i}", position="UTG", spot="RFI",
+             correct_strategy={"open": 1.0, "fold": 0.0})
+        for i in range(10)
+    ]
+
+    # Introduced cards are due TODAY+1, so 0 reviews due today.
+    # The daily new-card budget (15) is fully spent → 0 new in the queue.
+    due = srs.get_due_cards(introduced + untouched, today=TODAY, new_limit=15)
+    new_in_due = [c for c in due if c.is_new()]
+    assert len(new_in_due) == 0, \
+        f"daily limit hit, expected 0 new cards, got {len(new_in_due)}"
+
+
+def test_due_per_day_limit_allows_partial_fill():
+    """If only 5 introduced today, the other 10 new slots are still open."""
+    introduced = []
+    for i in range(5):
+        c = Card(hand=f"H{i}", position="UTG", spot="RFI",
+                 correct_strategy={"open": 1.0, "fold": 0.0})
+        srs.update_card(c, GOOD, today=TODAY)
+        introduced.append(c)
+
+    untouched = [
+        Card(hand=f"X{i}", position="UTG", spot="RFI",
+             correct_strategy={"open": 1.0, "fold": 0.0})
+        for i in range(20)
+    ]
+
+    due = srs.get_due_cards(introduced + untouched, today=TODAY, new_limit=15)
+    new_in_due = [c for c in due if c.is_new()]
+    assert len(new_in_due) == 10, \
+        f"15-5=10 slots remaining, got {len(new_in_due)}"
+
+
+def test_default_card_has_empty_strategy_not_none():
+    """
+    Card() without explicit correct_strategy gives an empty dict (via
+    default_factory), not None — so .get() in grade_answer never AttributeErrors.
+    """
+    c = Card(hand="AA", position="UTG", spot="RFI")
+    assert c.correct_strategy == {}
+    # Must grade safely (any action = not in strategy = AGAIN)
+    assert srs.grade_answer(c, "open") == AGAIN
+
+
 # ---------------------------------------------------------------------------
 # Persistence
 # ---------------------------------------------------------------------------
