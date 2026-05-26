@@ -1,5 +1,19 @@
 [
   {
+    "ts": "15:13:25",
+    "spot": "RFI",
+    "hero_position": "UTG",
+    "villain_position": null,
+    "hand": "J4s",
+    "card1": "J♦",
+    "card2": "4♦",
+    "correct_action": "fold",
+    "player_action": "fold",
+    "correct": true,
+    "ev": 0.0,
+    "is_timeout": false
+  },
+  {
     "ts": "11:06:38",
     "spot": "RFI",
     "hero_position": "UTG",
