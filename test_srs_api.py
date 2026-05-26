@@ -19,10 +19,13 @@ _DATA = os.path.join(_TMP, "data")
 _STATE = os.path.join(_TMP, "srs_state")
 os.makedirs(_DATA, exist_ok=True)
 
-# Copy the real range file in
+# Copy the real range file in, from the project's own data/ dir. Path is
+# resolved relative to this test file so it works on any machine — per
+# CLAUDE.md "no hardcoded paths" rule.
 RANGE_FILE_NAME = "gto_100bb_mtt.json"
+_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 shutil.copy(
-    "/mnt/user-data/uploads/gto_100bb_mtt.json",
+    os.path.join(_PROJECT_ROOT, "data", RANGE_FILE_NAME),
     os.path.join(_DATA, RANGE_FILE_NAME),
 )
 
