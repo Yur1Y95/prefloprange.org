@@ -107,7 +107,13 @@ def test_init_from_spots_attaches_villain_position():
     vs_rfi_cards = [c for c in cards if c.spot == "vs_RFI"]
     assert all(c.villain_position for c in vs_rfi_cards)
     sb_vs_utg = [c for c in vs_rfi_cards if c.position == "SB" and c.villain_position == "UTG"]
-    assert len(sb_vs_utg) == 2  # AA, AKs
+    # With implicit-fold expansion (default), SB vs UTG now contains all 169
+    # hands: AA and AKs from the explicit data, the other 167 auto-filled as
+    # pure folds.
+    assert len(sb_vs_utg) == 169
+    by_hand = {c.hand: c.correct_strategy for c in sb_vs_utg}
+    assert by_hand["AA"] == {"3bet": 1.0}
+    assert by_hand["AKs"] == {"3bet": 0.6, "call": 0.4}
 
 
 def test_init_from_spots_rfi_cards_have_no_villain():
@@ -128,6 +134,102 @@ def test_init_from_spots_normalizes_multi_action_strategy():
     assert "fold" not in aks_vs_utg.correct_strategy
     assert aks_vs_utg.correct_strategy["3bet"] == 0.6
     assert aks_vs_utg.correct_strategy["call"] == 0.4
+
+
+# --- Implicit-fold expansion (Variant B) ---
+
+def test_all_169_hands_returns_complete_universe():
+    hands = srs._all_169_hands()
+    assert len(hands) == 169
+    assert len(set(hands)) == 169          # all unique
+    # Spot-check shape: 13 pairs, 78 suited, 78 offsuit
+    pairs = [h for h in hands if len(h) == 2]
+    suited = [h for h in hands if h.endswith("s")]
+    offsuit = [h for h in hands if h.endswith("o")]
+    assert len(pairs) == 13
+    assert len(suited) == 78
+    assert len(offsuit) == 78
+    # Canonical notation: higher rank first, "AKs" not "KAs"
+    assert "AKs" in hands and "KAs" not in hands
+    assert "T9o" in hands and "9To" not in hands
+
+
+def test_init_from_spots_expands_rfi_to_169_per_position():
+    """Default behaviour: each populated RFI position gets all 169 hands —
+    explicit ones from the data, the rest as pure-fold cards."""
+    cards = srs.init_cards_from_spots({"RFI": SAMPLE_RANGES})
+    utg = [c for c in cards if c.spot == "RFI" and c.position == "UTG"]
+    btn = [c for c in cards if c.spot == "RFI" and c.position == "BTN"]
+    assert len(utg) == 169, f"UTG: expected 169, got {len(utg)}"
+    assert len(btn) == 169, f"BTN: expected 169, got {len(btn)}"
+    # Total = 2 populated positions × 169
+    rfi_cards = [c for c in cards if c.spot == "RFI"]
+    assert len(rfi_cards) == 338
+    # Explicit hands preserved; missing hands become pure folds
+    by_hand = {c.hand: c.correct_strategy for c in utg}
+    assert by_hand["AA"] == {"open": 1.0}                  # explicit pure-open
+    assert by_hand["A5s"] == {"open": 0.7, "fold": 0.3}    # explicit mixed
+    assert by_hand["72o"] == {"fold": 1.0}                 # auto-expanded fold
+
+
+def test_init_from_spots_expands_per_villain_for_vs_rfi():
+    """For vs_RFI, each (hero, villain) tuple gets its own 169-card expansion —
+    they are independent decks, not collapsed into one per hero."""
+    cards = srs.init_cards_from_spots(SAMPLE_SPOTS, scope=("vs_RFI",))
+    sb_vs_utg = [c for c in cards if c.position == "SB" and c.villain_position == "UTG"]
+    bb_vs_btn = [c for c in cards if c.position == "BB" and c.villain_position == "BTN"]
+    assert len(sb_vs_utg) == 169
+    assert len(bb_vs_btn) == 169
+    # Total vs_RFI cards = sum of (hero, villain) tuples × 169
+    assert len([c for c in cards if c.spot == "vs_RFI"]) == 338
+
+
+def test_init_from_spots_no_expansion_when_flag_off():
+    """fill_implicit_fold=False reverts to legacy: only explicit entries."""
+    cards = srs.init_cards_from_spots(SAMPLE_SPOTS, fill_implicit_fold=False)
+    utg = [c for c in cards if c.spot == "RFI" and c.position == "UTG"]
+    assert len(utg) == 4   # AA, AKs, A5s, KTo — exactly as written in SAMPLE_RANGES
+    sb_vs_utg = [c for c in cards if c.spot == "vs_RFI"
+                 and c.position == "SB" and c.villain_position == "UTG"]
+    assert len(sb_vs_utg) == 2   # AA, AKs
+
+
+def test_init_from_spots_empty_position_block_skipped():
+    """Empty dict for a position = "not defined yet, don't drill it" — must NOT
+    blow up into 169 fold-cards. Only populated positions are expanded."""
+    spots = {"RFI": {"UTG": {}, "BTN": {"AA": {"open": 1.0}}}}
+    cards = srs.init_cards_from_spots(spots)
+    positions = {c.position for c in cards}
+    assert positions == {"BTN"}, f"empty UTG should be skipped, got {positions}"
+    assert len(cards) == 169
+
+
+def test_init_from_spots_empty_villain_block_skipped():
+    """Same skip behaviour for empty (hero, villain) blocks in vs_RFI / vs_3bet."""
+    spots = {"vs_RFI": {"SB": {"vs_UTG": {}, "vs_CO": {"AA": {"3bet": 1.0}}}}}
+    cards = srs.init_cards_from_spots(spots)
+    villains = {c.villain_position for c in cards}
+    assert villains == {"CO"}     # vs_UTG was empty, skipped
+    assert len(cards) == 169
+
+
+def test_init_from_spots_expanded_fold_cards_grade_correctly():
+    """Auto-expanded fold-cards must grade 'fold' as GOOD and any other
+    action as AGAIN — same path as any other pure-fold card."""
+    cards = srs.init_cards_from_spots({"RFI": {"UTG": {"AA": {"open": 1.0}}}})
+    trash = next(c for c in cards if c.hand == "72o")
+    assert trash.correct_strategy == {"fold": 1.0}
+    assert srs.grade_answer(trash, "fold") == GOOD
+    assert srs.grade_answer(trash, "open") == AGAIN
+    # And they classify as pure_fold for any downstream UI logic that asks
+    assert trash.classify() == "pure_fold"
+
+
+def test_init_cards_from_ranges_legacy_no_expansion():
+    """The legacy entry point must keep its original semantics — no expansion —
+    so older callers and their tests don't get 169-card decks unexpectedly."""
+    cards = srs.init_cards_from_ranges(SAMPLE_RANGES)
+    assert len(cards) == 6   # 4 UTG + 2 BTN, exactly as the explicit data
 
 
 # ---------------------------------------------------------------------------
@@ -308,6 +410,60 @@ def test_invalid_rating_raises():
 
 
 # ---------------------------------------------------------------------------
+# Easy upgrade — Variant 2 of the reveal-screen flow.
+#
+# Action click submits with marked_easy=false → backend applies GOOD. If the
+# user then clicks "Easy" in the reveal, this delta function bumps the
+# already-saved card from GOOD to EASY without needing to buffer pre-update
+# state across two HTTP calls.
+# ---------------------------------------------------------------------------
+
+def test_upgrade_good_to_easy_bumps_interval_and_ease():
+    """Apply the GOOD→EASY delta on top of an already-graded card:
+    interval × 1.3 (with a min +1 day), ease + 0.15."""
+    c = make_new_card()
+    srs.update_card(c, GOOD, today=TODAY)                       # interval=1
+    srs.update_card(c, GOOD, today=TODAY + timedelta(days=1))   # interval=3
+    srs.upgrade_good_to_easy(c, today=TODAY + timedelta(days=1))
+    # max(3+1, round(3*1.3)=4) = 4
+    assert c.interval_days == 4
+    assert abs(c.ease_factor - 2.65) < 1e-9
+
+
+def test_upgrade_good_to_easy_minimum_one_day_growth():
+    """For very small intervals, naive rounding could leave the interval
+    unchanged. We enforce at least +1 day so the upgrade is never a no-op
+    on the very first review."""
+    c = make_new_card()
+    srs.update_card(c, GOOD, today=TODAY)                       # interval=1
+    srs.upgrade_good_to_easy(c, today=TODAY)
+    # max(1+1, round(1*1.3)=1) = 2
+    assert c.interval_days == 2
+    assert abs(c.ease_factor - 2.65) < 1e-9
+
+
+def test_upgrade_good_to_easy_recomputes_next_review_from_today():
+    """next_review must be recomputed from `today` + new interval — never
+    a stale value carried over from before the upgrade."""
+    c = make_new_card()
+    srs.update_card(c, GOOD, today=TODAY)
+    srs.upgrade_good_to_easy(c, today=TODAY)
+    expected = (TODAY + timedelta(days=c.interval_days)).isoformat()
+    assert c.next_review == expected
+
+
+def test_upgrade_good_to_easy_can_be_chained():
+    """Applying the upgrade twice in a row keeps bumping interval and ease
+    monotonically — no clamping or weird saturation behaviour."""
+    c = make_new_card()
+    srs.update_card(c, GOOD, today=TODAY)            # interval=1, ease=2.5
+    srs.upgrade_good_to_easy(c, today=TODAY)         # → interval=2, ease=2.65
+    srs.upgrade_good_to_easy(c, today=TODAY)         # → max(3, round(2.6)=3) = 3, ease=2.80
+    assert c.interval_days == 3
+    assert abs(c.ease_factor - 2.80) < 1e-9
+
+
+# ---------------------------------------------------------------------------
 # Scheduling
 # ---------------------------------------------------------------------------
 
@@ -407,6 +563,112 @@ def test_default_card_has_empty_strategy_not_none():
     assert c.correct_strategy == {}
     # Must grade safely (any action = not in strategy = AGAIN)
     assert srs.grade_answer(c, "open") == AGAIN
+
+
+# ---------------------------------------------------------------------------
+# History logging (Track A.1) — per-review log on each Card.
+#
+# Each entry: {date, delta_days, rating, correct}. Written by update_card
+# BEFORE mutating last_seen so delta_days reflects the *actual* elapsed
+# interval, which is what future FSRS calibration will fit against.
+# ---------------------------------------------------------------------------
+
+def test_history_starts_empty_on_new_card():
+    c = make_new_card()
+    assert c.history == []
+
+
+def test_update_card_appends_one_history_entry():
+    c = make_new_card()
+    srs.update_card(c, GOOD, today=TODAY)
+    assert len(c.history) == 1
+    entry = c.history[0]
+    assert entry["date"]       == TODAY.isoformat()
+    assert entry["rating"]     == GOOD
+    assert entry["correct"]    is True
+    assert entry["delta_days"] == 0     # first review — no previous to delta from
+
+
+def test_history_records_actual_delta_between_reviews():
+    """Second review should record delta_days = days since last_seen at time
+    of THIS review (not the scheduled interval — the *actual* elapsed time)."""
+    c = make_new_card()
+    srs.update_card(c, GOOD, today=TODAY)                          # review 1
+    srs.update_card(c, GOOD, today=TODAY + timedelta(days=5))      # review 2
+    assert len(c.history) == 2
+    assert c.history[0]["delta_days"] == 0
+    assert c.history[1]["delta_days"] == 5
+    assert c.history[1]["date"] == (TODAY + timedelta(days=5)).isoformat()
+
+
+def test_history_marks_again_as_not_correct():
+    """An AGAIN rating logs correct=False even though it's still a review event.
+    Future calibration uses this binary flag as r_i ∈ {0, 1} in the
+    SSP-MMC dataset format."""
+    c = make_new_card()
+    srs.update_card(c, AGAIN, today=TODAY)
+    assert c.history[0]["correct"] is False
+    assert c.history[0]["rating"]  == AGAIN
+
+
+def test_history_logs_easy_separately_from_good():
+    c = make_new_card()
+    srs.update_card(c, EASY, today=TODAY)
+    assert c.history[0]["rating"]  == EASY
+    assert c.history[0]["correct"] is True
+
+
+def test_upgrade_good_to_easy_rewrites_last_history_entry():
+    """upgrade_good_to_easy mutates the most recent history entry's rating
+    rather than appending a new one — semantically the user reclassified
+    the same review event, not added a second one."""
+    c = make_new_card()
+    srs.update_card(c, GOOD, today=TODAY)                          # rating=GOOD
+    assert c.history[-1]["rating"] == GOOD                         # baseline
+    srs.upgrade_good_to_easy(c, today=TODAY)
+    assert len(c.history) == 1                                     # still ONE entry
+    assert c.history[-1]["rating"]  == EASY                        # promoted
+    assert c.history[-1]["correct"] is True
+
+
+def test_history_persists_through_save_load():
+    """History survives JSON round-trip — without this, every restart wipes
+    the very data we're collecting for calibration."""
+    c = make_new_card()
+    srs.update_card(c, GOOD, today=TODAY)
+    srs.update_card(c, AGAIN, today=TODAY + timedelta(days=2))
+
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "state.json"
+        srs.save_state([c], path)
+        loaded = srs.load_state(path)
+
+    assert len(loaded[0].history) == 2
+    assert loaded[0].history[0]["rating"]     == GOOD
+    assert loaded[0].history[1]["rating"]     == AGAIN
+    assert loaded[0].history[1]["delta_days"] == 2
+
+
+def test_history_loads_cleanly_when_field_missing_in_json():
+    """Old state files saved before A.1 don't have a `history` key.
+    load_state must give them an empty list (not crash, not omit the field)."""
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "state.json"
+        # Write a state file in the pre-A.1 shape — no history field
+        legacy = [{
+            "hand": "AA", "position": "UTG", "spot": "RFI",
+            "villain_position": "",
+            "correct_strategy": {"open": 1.0},
+            "ease_factor": 2.5, "interval_days": 1,
+            "next_review": "", "last_seen": "",
+            "consecutive_correct": 0,
+            "total_seen": 1, "total_correct": 1,
+        }]
+        path.write_text(__import__("json").dumps(legacy), encoding="utf-8")
+
+        loaded = srs.load_state(path)
+
+    assert loaded[0].history == []   # default_factory kicks in cleanly
 
 
 # ---------------------------------------------------------------------------

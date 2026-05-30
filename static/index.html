@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=20260530b">
 </head>
 <body>
 
@@ -17,6 +17,7 @@
       <button class="mode-tab" data-mode="editor">Editor</button>
       <button class="mode-tab" data-mode="visualizer">Visualizer</button>
       <button class="mode-tab active" data-mode="drill">Drill</button>
+      <button class="mode-tab" data-mode="learn">Learn</button>
       <button class="mode-tab" data-mode="postflop">Postflop</button>
       <button class="mode-tab" data-mode="analyzer">Analyzer</button>
     </div>
@@ -45,7 +46,7 @@
             <option value="9max">9-max</option>
           </select>
         </div>
-        <div class="meta-row">
+        <div class="meta-row" id="eDepthRow">
           <span class="mode-label">Depth</span>
           <select class="mini-select" id="eDepth">
             <option value="100">100 BB</option>
@@ -179,9 +180,6 @@
         <button class="save-btn save-btn-secondary" id="eSaveBtn">Save Range</button>
         <div style="display:flex;gap:6px;margin-top:6px">
           <button class="seg" id="eExportBtn" style="flex:1;font-size:10px;padding:6px 0" title="Download current range as JSON">⬇ Export</button>
-          <label class="seg" style="flex:1;font-size:10px;cursor:pointer;text-align:center;padding:6px 0;border-radius:5px" title="Upload JSON range">⬆ Import
-            <input type="file" id="eImportInput" accept=".json" style="display:none">
-          </label>
         </div>
         <button class="reset-btn" id="eClearAllBtn">Clear All Hands</button>
       </div>
@@ -209,7 +207,7 @@
           </select>
         </div>
         <div class="meta-row" style="margin-top:4px">
-          <span class="mode-label">Depth</span>
+          <span class="mode-label">Range pack</span>
           <select class="mini-select" id="vDepthSelect"></select>
         </div>
         <button class="deal-btn" id="vRefreshBtn" style="margin-top:8px;font-size:11px;padding:8px">↻ Refresh Ranges</button>
@@ -298,7 +296,7 @@
           </select>
         </div>
         <div class="meta-row" style="margin-top:4px">
-          <span class="mode-label">Depth</span>
+          <span class="mode-label">Range pack</span>
           <select class="mini-select" id="dDepthSelect"></select>
         </div>
       </div>
@@ -360,11 +358,11 @@
           </div>
         </div>
         <div class="seats" id="seats"></div>
-        <svg class="timer-ring" id="timerRing" viewBox="0 0 560 360" style="display:none">
-          <ellipse cx="280" cy="180" rx="268" ry="168"
-                   fill="none" stroke="#c9a84c" stroke-width="4"
-                   stroke-dasharray="1340" stroke-dashoffset="0"
-                   id="timerArc" stroke-linecap="round"/>
+        <svg class="timer-ring" id="timerRing" viewBox="0 0 648 298" preserveAspectRatio="none" style="display:none">
+          <rect x="2" y="2" width="644" height="294" rx="147" ry="147"
+                fill="none" stroke="#c9a84c" stroke-width="4"
+                stroke-dasharray="1624" stroke-dashoffset="0"
+                id="timerArc" stroke-linecap="round"/>
         </svg>
       </div>
       <div class="hero-cards" id="heroCards">
@@ -396,6 +394,134 @@
         <button class="reset-btn" id="clearHistoryBtn">Clear History</button>
       </div>
     </aside>
+  </main>
+
+  <!-- ═══════════════ LEARN ═══════════════ -->
+  <!-- Stages 1-2 done: tab wiring + entry screen with deck picker.
+       Stage 3 will replace #learnCard placeholder with the actual card view
+       (reused renderSeats/renderCards from drill.js + action buttons). -->
+  <main class="layout" id="learnMode" style="display:none">
+
+    <section id="learnEntry">
+      <div class="learn-entry-card">
+        <h2 class="learn-entry-title">Learn — Spaced Repetition</h2>
+
+        <div class="learn-row">
+          <label class="learn-label">Range pack</label>
+          <select class="mini-select" id="learnFileSelect">
+            <option value="">— loading… —</option>
+          </select>
+        </div>
+
+        <div class="learn-row" id="learnScopeRow">
+          <label class="learn-label">Spots to learn</label>
+          <div class="seg-buttons" id="learnScopeBtns">
+            <button class="seg active" data-lscope="all">All</button>
+            <button class="seg" data-lscope="RFI">RFI</button>
+            <button class="seg" data-lscope="vs_RFI">vs RFI</button>
+            <button class="seg" data-lscope="vs_3bet">vs 3-Bet</button>
+          </div>
+          <div class="learn-scope-locked-hint" id="learnScopeLockedHint" style="display:none">
+            Scope is fixed once the deck is initialized. Reset to change it.
+          </div>
+        </div>
+
+        <div class="learn-counters" id="learnCounters" style="display:none">
+          <div class="learn-counter">
+            <div class="lc-num" id="lcTotal">—</div>
+            <div class="lc-label">Total</div>
+          </div>
+          <div class="learn-counter">
+            <div class="lc-num" id="lcDue">—</div>
+            <div class="lc-label">Due today</div>
+          </div>
+          <div class="learn-counter">
+            <div class="lc-num" id="lcNew">—</div>
+            <div class="lc-label">New</div>
+          </div>
+          <div class="learn-counter">
+            <div class="lc-num" id="lcLearned">—</div>
+            <div class="lc-label">Learned</div>
+          </div>
+        </div>
+
+        <div class="learn-actions">
+          <button class="learn-start-btn" id="learnStartBtn" disabled>Loading…</button>
+          <button class="learn-reset-btn" id="learnResetBtn" style="display:none">Reset progress</button>
+        </div>
+
+        <div class="learn-status-msg" id="learnStatusMsg"></div>
+      </div>
+    </section>
+
+    <!-- Card screen — mirrors drill's .table-section structure exactly so
+         the SAME CSS classes light up the same visuals. Only the IDs are
+         learn-prefixed, and we omit timer-ring / action-log (no timer in
+         Learn) and feedback-strip (Stage 4 will add its own reveal). -->
+    <section id="learnCard" class="table-section" style="display:none">
+      <div class="spot-line" id="learnSpotLine">— · —</div>
+      <div class="table-wrap">
+        <div class="table-rim"></div>
+        <div class="table-felt">
+          <div class="pot-block">
+            <span class="pot-label">POT</span>
+            <span class="pot-value" id="learnPotValue">1.5 BB</span>
+          </div>
+        </div>
+        <div class="seats" id="learnSeats"></div>
+      </div>
+      <div class="hero-cards" id="learnHeroCards">
+        <div class="card card-back" id="learnCard1"></div>
+        <div class="card card-back" id="learnCard2"></div>
+      </div>
+      <div class="action-bar" id="learnActionBar"></div>
+      <!-- Reveal strip: hidden until an action is answered. Shows the verdict,
+           an optional Easy button (correct answers only), and Next. -->
+      <div class="learn-feedback-strip" id="learnFeedbackStrip" style="display:none">
+        <span class="lfb-verdict" id="lfbVerdict"></span>
+        <button class="learn-easy-btn" id="learnEasyBtn" style="display:none">Easy</button>
+        <button class="learn-next-btn" id="learnNextBtn">Next →</button>
+      </div>
+      <div class="learn-card-footer">
+        <button class="learn-back-btn" id="learnBackBtn">← Back to deck overview</button>
+        <div class="learn-queue-badge" id="learnQueueBadge"></div>
+      </div>
+    </section>
+
+    <section id="learnReveal" style="display:none"></section>
+
+    <!-- End-of-session summary — shown when the day's queue is empty.
+         Counters here track the JUST-ENDED session, not the whole deck. -->
+    <section id="learnSummary" style="display:none">
+      <div class="learn-entry-card">
+        <h2 class="learn-entry-title">Session complete</h2>
+        <div class="learn-counters" style="display:grid">
+          <div class="learn-counter">
+            <div class="lc-num" id="lsAnswered">0</div>
+            <div class="lc-label">Answered</div>
+          </div>
+          <div class="learn-counter">
+            <div class="lc-num" id="lsCorrect">0</div>
+            <div class="lc-label">Correct</div>
+          </div>
+          <div class="learn-counter">
+            <div class="lc-num" id="lsAccuracy">—</div>
+            <div class="lc-label">Accuracy</div>
+          </div>
+          <div class="learn-counter">
+            <div class="lc-num" id="lsEasy">0</div>
+            <div class="lc-label">Easy</div>
+          </div>
+        </div>
+        <div class="learn-summary-note">
+          Queue empty for today. Your due reviews refill at midnight — come back tomorrow.
+        </div>
+        <div class="learn-actions">
+          <button class="learn-start-btn" id="learnSummaryCloseBtn">Back to deck overview</button>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- ═══════════════ POSTFLOP ═══════════════ -->
@@ -510,10 +636,13 @@
 
   <!-- Cache-bust query params: bump the `v=` value when you change any JS
        file so the browser fetches the new version instead of a stale copy. -->
-  <script src="/static/storage.js?v=20260519b"></script>
-  <script src="/static/drill.js?v=20260519b"></script>
-  <script src="/static/postflop.js?v=20260519b"></script>
-  <script src="/static/visualizer.js?v=20260519b"></script>
-  <script src="/static/editor.js?v=20260519b"></script>
+  <script src="/static/cards.js?v=20260529a"></script>
+  <script src="/static/chips.js?v=20260530c"></script>
+  <script src="/static/drill.js?v=20260530c"></script>
+  <script src="/static/postflop.js?v=20260530c"></script>
+  <script src="/static/visualizer.js?v=20260530a"></script>
+  <script src="/static/editor.js?v=20260530a"></script>
+  <script src="/static/learn.js?v=20260526f"></script>
+  <script src="/static/mobile.js?v=20260529b"></script>
 </body>
 </html>

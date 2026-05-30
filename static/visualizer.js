@@ -30,11 +30,10 @@ async function vizBoot() {
   try {
     try {
       const listRes = await fetchWithTimeout('/api/ranges/list');
-      const server  = await listRes.json();
-      viz._allFiles = [...server, ...UserStorage.allFileEntries()];
+      viz._allFiles = await listRes.json();
     } catch (e) {
       console.warn('Visualizer: could not load file list:', e);
-      viz._allFiles = UserStorage.allFileEntries();
+      viz._allFiles = [];
     }
 
     buildMatrix();
@@ -56,10 +55,13 @@ async function vizBoot() {
   }
 }
 
-// Called from editor after save
-function vizRefreshAfterSave() {
-  viz._allFiles = viz._allFiles.filter(f => f.source !== 'user');
-  viz._allFiles = [...viz._allFiles, ...UserStorage.allFileEntries()];
+// Called from editor after save — just re-fetch the server list. Used to
+// also re-merge UserStorage entries; that path is gone (see P-001).
+async function vizRefreshAfterSave() {
+  try {
+    const res = await fetch('/api/ranges/list');
+    if (res.ok) viz._allFiles = await res.json();
+  } catch (_) { /* ignore */ }
   vizRefreshDepthOptions();
 }
 
@@ -75,7 +77,15 @@ function vizRefreshDepthOptions() {
   });
 
   select.innerHTML = filtered.length
-    ? filtered.map(f => `<option value="${f.filename}">${f.label || f.stack_depth}</option>`).join('')
+    ? filtered.map(f => {
+        // Filename is the user's chosen identity — show it as the primary
+        // name. The auto-generated label (game/table/depth) is secondary
+        // context. Skip the suffix when it would just duplicate the name.
+        const name = f.filename.replace(/\.json$/, '');
+        const meta = (f.label && f.label !== name) ? f.label : (f.stack_depth || '');
+        const text = (meta && meta !== name) ? `${name} · ${meta}` : name;
+        return `<option value="${f.filename}">${text}</option>`;
+      }).join('')
     : '<option value="">No ranges</option>';
   viz.currentFile = filtered.length ? filtered[0].filename : '';
 }
@@ -85,11 +95,9 @@ async function vizLoadFile(filename) {
     const res = await fetch('/api/ranges');
     if (!res.ok) return;
     viz.rangeData = await res.json();
-  } else if (filename.startsWith('user:')) {
-    const data = UserStorage.load(filename.slice(5));
-    if (!data) return;
-    viz.rangeData = data;
   } else {
+    // All ranges live on the server now; user:-prefixed localStorage path
+    // is gone (see P-001).
     const res = await fetch(`/api/ranges?file=${encodeURIComponent(filename)}`);
     if (!res.ok) return;
     viz.rangeData = await res.json();
@@ -456,8 +464,8 @@ function paintRFI(cell, hand, value) {
     return;
   }
 
-  // Multi-action: open=green, call=blue, fold=dark
-  const COLOR = { open: '#2E7D32', call: '#3F7FB5', fold: '#232b26' };
+  // Multi-action: open=green, call=blue, fold=empty-cell base (no distinct stripe)
+  const COLOR = { open: '#2E7D32', call: '#3F7FB5', fold: '#1e2a22' };
   const ORDER = ['open', 'call', 'fold'];
   let cum = 0;
   const stops = [];
@@ -503,7 +511,7 @@ function paintActions(cell, hand, actions) {
   }
 
   // Build CSS gradient segments
-  const COLOR = { '3bet': '#F44336', '4bet': '#c0392b', call: '#3F7FB5', fold: '#232b26' };
+  const COLOR = { '3bet': '#F44336', '4bet': '#c0392b', call: '#3F7FB5', fold: '#1e2a22' };
   let cum = 0;
   const stops = [];
 

@@ -267,40 +267,45 @@ function editorBoot() {
   document.getElementById('eSaveCurrentBtn')?.addEventListener('click', edSaveCurrent);
 
   // ── EXPORT ─────────────────────────────────────────
+  // Pure browser download — no localStorage side-effects. Editor's "Save"
+  // button is the only thing that persists to data/; Export is just a way
+  // to grab a local copy of whatever's currently in the matrix.
   document.getElementById('eExportBtn')?.addEventListener('click', () => {
     const name = (document.getElementById('eSaveFilename').value.trim()
                   || document.getElementById('eSaveFilename').placeholder)
-                  .replace(/\.json$/, '');
-    // Save current state first, then export
-    const cfg = edPosConfig();
-    const rangeData = {
-      meta: { game_type: ed.gameType, table_size: ed.tableSize, stack_depth: ed.depth+'bb',
-              label: `${ed.gameType} ${ed.tableSize} ${ed.depth}bb` },
-      config: { positions: cfg.positions, rfi_positions: cfg.rfi,
-                vs_rfi_options: cfg.vs_rfi, vs_3bet_options: cfg.vs_3bet },
-      spots: ed.ranges,
-    };
-    UserStorage.save(name, rangeData);
-    UserStorage.exportFile(name);
+                  .replace(/\.json$/, '') || 'range';
+    const rangeData = _edBuildRangeData();
+    const blob = new Blob([JSON.stringify(rangeData, null, 2)],
+                          { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = name + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
   });
 
-  // ── IMPORT ─────────────────────────────────────────
-  document.getElementById('eImportInput')?.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const filename = await UserStorage.importFile(file);
-      if (filename) {
-        if (typeof drillRefreshFileList === 'function') drillRefreshFileList();
-        if (typeof vizRefreshAfterSave  === 'function') vizRefreshAfterSave();
-        edPopulateLoadDropdown();
-        alert(`✓ Импортировано: ${filename}`);
-      }
-    } catch (err) {
-      alert('Ошибка импорта: ' + err.message);
-    }
-    e.target.value = '';
-  });
+  // Import was removed — editor is the configurator of your OWN JSON; no
+  // foreign-file workflow is needed. (Previously imported into localStorage
+  // via UserStorage, which is also gone in this pass.)
+}
+
+// Cash games on micros run with auto-rebuy → stack is effectively always 100bb,
+// so the Depth selector is meaningless for Cash. Hide the row and pin depth=100
+// whenever Cash is selected; show it again for MTT. Called from the change
+// handler and from the file-load path so both interactive and programmatic
+// gameType changes stay in sync.
+function edApplyDepthVisibility() {
+  const row = document.getElementById('eDepthRow');
+  const sel = document.getElementById('eDepth');
+  if (!row || !sel) return;
+  if (ed.gameType === 'Cash') {
+    row.style.display = 'none';
+    sel.value = '100';
+    ed.depth = '100';
+  } else {
+    row.style.display = '';   // restore default — sibling .meta-row layout
+  }
 }
 
 // ── EVENTS ────────────────────────────────────────────
@@ -311,6 +316,7 @@ function edBindEvents() {
       ed.gameType  = document.getElementById('eGameType').value;
       ed.tableSize = document.getElementById('eTableSize').value;
       ed.depth     = document.getElementById('eDepth').value;
+      edApplyDepthVisibility();   // toggle Depth row based on new gameType
       ed.heroPos   = edPosConfig().rfi[0];
       ed.villainPos = null;
       edRenderControls();
@@ -318,6 +324,10 @@ function edBindEvents() {
       edUpdateFilename();
     });
   });
+
+  // Initial paint — covers the case where the page restored Cash from
+  // browser session/autofill before any change event fired.
+  edApplyDepthVisibility();
 
   // Spot buttons
   document.querySelectorAll('[data-espot]').forEach(btn => {
@@ -519,7 +529,7 @@ function edRenderCell(hand) {
     call:  '#3F7FB5',
     '3bet':'#F44336',
     '4bet':'#c0392b',
-    fold:  '#232b26',
+    fold:  '#1e2a22',   // = empty-cell base, so fold remainder blends in (no stripe)
   };
 
   const actionOrder = ed.spot === 'vs_3bet'
@@ -619,12 +629,36 @@ function _edBuildRangeData() {
   };
 }
 
-/** Core save — persists to localStorage and animates the given button. */
-function _edDoSave(rawName, btn, defaultLabel) {
+/** Core save — persists to the server's data/ directory and animates the
+ *  given button. Async because we POST to /api/ranges/save.
+ *
+ *  Previous version wrote to browser localStorage via UserStorage, which
+ *  meant edits never propagated to Visualizer or Drill (they read from
+ *  the server). See docs/problems.md P-001 for the full backstory. */
+async function _edDoSave(rawName, btn, defaultLabel) {
   btn.textContent = 'Saving…';
   btn.disabled    = true;
 
-  const ok = UserStorage.save(rawName, _edBuildRangeData());
+  let ok = false;
+  let errMsg = '';
+  try {
+    const res = await fetch('/api/ranges/save', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        filename: rawName,
+        data:     _edBuildRangeData(),
+      }),
+    });
+    if (res.ok) {
+      ok = true;
+    } else {
+      const detail = await res.json().catch(() => ({}));
+      errMsg = detail.detail || `HTTP ${res.status}`;
+    }
+  } catch (e) {
+    errMsg = e.message;
+  }
 
   if (ok) {
     btn.textContent       = '✓ Saved!';
@@ -644,7 +678,8 @@ function _edDoSave(rawName, btn, defaultLabel) {
       btn.disabled          = false;
     }, 2000);
   } else {
-    btn.textContent       = '✗ Error';
+    console.error('[editor.js] save failed:', errMsg);
+    btn.textContent       = '✗ ' + (errMsg.length > 30 ? 'Error' : errMsg);
     btn.style.borderColor = '#e74c3c';
     btn.style.color       = '#e74c3c';
     setTimeout(() => {
@@ -652,7 +687,7 @@ function _edDoSave(rawName, btn, defaultLabel) {
       btn.style.borderColor = '';
       btn.style.color       = '';
       btn.disabled          = false;
-    }, 2000);
+    }, 3500);
   }
 
   return ok;
@@ -738,39 +773,24 @@ async function edPopulateLoadDropdown() {
 
   sel.innerHTML = '<option value="">— select file —</option>';
 
-  // Server files
+  // Server is the only source of truth now. Previously we also merged in
+  // UserStorage (localStorage) entries — that path is gone (see P-001).
   try {
-    const res   = await fetch('/api/ranges/list');
-    if (res.ok) {
-      const files = await res.json();           // [{filename, label, ...}]
-      if (files.length) {
-        const grp = document.createElement('optgroup');
-        grp.label = '📂 Server ranges';
-        files.forEach(f => {
-          const opt = document.createElement('option');
-          opt.value       = 'server:' + f.filename;
-          opt.textContent = f.label || f.filename;
-          grp.appendChild(opt);
-        });
-        sel.appendChild(grp);
-      }
-    }
-  } catch (_) { /* server unreachable — skip */ }
-
-  // User (localStorage) files
-  const userEntries = UserStorage.allFileEntries();
-  if (userEntries.length) {
-    const grp = document.createElement('optgroup');
-    grp.label = '★ My saved ranges';
-    userEntries.forEach(f => {
+    const res = await fetch('/api/ranges/list');
+    if (!res.ok) return;
+    const files = await res.json();           // [{filename, label, ...}]
+    files.forEach(f => {
       const opt = document.createElement('option');
-      // f.filename is already "user:<name>"
-      opt.value       = f.filename;
-      opt.textContent = f.label || f.filename;
-      grp.appendChild(opt);
+      opt.value       = 'server:' + f.filename;
+      // Filename is the user's chosen identity — lead with it; show the
+      // auto-generated label as secondary context. Skip the suffix when it
+      // would just duplicate the name. Mirrors vizRefreshDepthOptions.
+      const name = f.filename.replace(/\.json$/, '');
+      const meta = (f.label && f.label !== name) ? f.label : (f.stack_depth || '');
+      opt.textContent = (meta && meta !== name) ? `${name} · ${meta}` : name;
+      sel.appendChild(opt);
     });
-    sel.appendChild(grp);
-  }
+  } catch (_) { /* server unreachable — leave dropdown with placeholder */ }
 }
 
 /** Load the selected file into the editor */
@@ -787,20 +807,11 @@ async function edLoadRange() {
   status.className   = 'load-status';
 
   try {
-    let data;
-
-    if (val.startsWith('user:')) {
-      // localStorage
-      const name = val.slice('user:'.length);
-      data = UserStorage.load(name);
-      if (!data) throw new Error('File not found in local storage');
-    } else {
-      // server — val is "server:<filename>", strip prefix
-      const filename = val.slice('server:'.length);
-      const res = await fetch(`/api/ranges?file=${encodeURIComponent(filename)}`);
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
-      data = await res.json();
-    }
+    // val is always "server:<filename>" now — the localStorage path is gone.
+    const filename = val.startsWith('server:') ? val.slice('server:'.length) : val;
+    const res = await fetch(`/api/ranges?file=${encodeURIComponent(filename)}`);
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    const data = await res.json();
 
     edApplyLoadedData(data, val);
 
@@ -848,6 +859,9 @@ function edApplyLoadedData(data, sourceKey) {
       if (dp) dp.value = ed.depth;
     }
   }
+
+  // Loading a Cash file: hide the Depth row (and pin to 100); MTT shows it.
+  edApplyDepthVisibility();
 
   // ── 2. Deep-copy spots into ed.ranges ─────────────
   const spots = data.spots || {};

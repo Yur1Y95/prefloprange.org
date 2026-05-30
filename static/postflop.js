@@ -17,17 +17,29 @@
       sess: { ok: 0, total: 0 },
     };
   
-    // ---- card rendering: API gives "AhKs", reuse drill.js card markup ----
+    // ---- card rendering: API gives "AhKs" pair-strings ----
+    // Tries the recolored 4-color SVG asset first (shared helper from cards.js)
+    // and falls back to the legacy CSS-drawn card if the input can't be mapped.
     function renderInto(containerId, cardStr) {
       const box = document.getElementById(containerId);
       if (!box) return;
       box.innerHTML = '';
       for (let i = 0; i < cardStr.length; i += 2) {
-        const rank = cardStr[i] === 'T' ? '10' : cardStr[i];
-        const sc = cardStr[i + 1].toLowerCase();
-        const sym = SUIT[sc];
+        const pair = cardStr.slice(i, i + 2);    // e.g. "Ah"
+        const el   = document.createElement('div');
+
+        // 1. Preferred: SVG asset from /cards/ via the shared helper.
+        if (typeof renderSvgCard === 'function' &&
+            renderSvgCard(el, pair, { delayIndex: i / 2 })) {
+          box.appendChild(el);
+          continue;
+        }
+
+        // 2. Fallback: legacy CSS card with unicode suit symbols.
+        const rank  = pair[0] === 'T' ? '10' : pair[0];
+        const sc    = pair[1].toLowerCase();
+        const sym   = SUIT[sc];
         const isRed = RED.includes(sym);
-        const el = document.createElement('div');
         el.className = `card card-front ${isRed ? 'red' : 'black'} deal-in`;
         el.style.animationDelay = (i / 2) * 0.07 + 's';
         el.innerHTML =
@@ -56,12 +68,11 @@
         `<div class="seat-circle is-villain">${villainPos}</div>`;
       seats.appendChild(vSeat);
 
-      // ── Villain bet chip — in the gap between villain circle and board cards ──
-      const chip = document.createElement('div');
-      chip.className   = 'bet-chip chip-open';
-      chip.textContent = toCall;
-      chip.style.top   = '20%';
-      chip.style.left  = '50%';
+      // ── Villain bet chip — in the gap between villain circle and board cards.
+      // Denominated chip stack (chips.js), shared with Drill. ──
+      const chip = chipBetStack(toCall);
+      chip.style.top  = '20%';
+      chip.style.left = '50%';
       seats.appendChild(chip);
 
       // ── Hero seat (bottom center, inside table) ────────

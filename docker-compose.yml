@@ -10,6 +10,7 @@ services:
       # Изменения в файлах видны сразу без пересборки
       - ./data:/app/data
       - ./static:/app/static
+      - ./cards:/app/cards
       - ./stats.json:/app/stats.json
       - ./history.json:/app/history.json
       # Python-файлы монтируются для горячей перезагрузки
@@ -21,4 +22,6 @@ services:
       - ./postflop_engine.py:/app/postflop_engine.py
       - ./postflop_api.py:/app/postflop_api.py
       - ./equity_api.py:/app/equity_api.py
+      - ./srs.py:/app/srs.py
+      - ./srs_api.py:/app/srs_api.py
     restart: unless-stopped

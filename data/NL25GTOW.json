@@ -1,0 +1,356 @@
+{
+  "meta": {
+    "game_type": "Cash",
+    "table_size": "6max",
+    "stack_depth": "100bb",
+    "label": "Cash 6max 100bb"
+  },
+  "config": {
+    "positions": [
+      "UTG",
+      "MP",
+      "CO",
+      "BTN",
+      "SB",
+      "BB"
+    ],
+    "rfi_positions": [
+      "UTG",
+      "MP",
+      "CO",
+      "BTN",
+      "SB"
+    ],
+    "vs_rfi_options": {
+      "MP": [
+        "UTG"
+      ],
+      "CO": [
+        "UTG",
+        "MP"
+      ],
+      "BTN": [
+        "UTG",
+        "MP",
+        "CO"
+      ],
+      "SB": [
+        "UTG",
+        "MP",
+        "CO",
+        "BTN"
+      ],
+      "BB": [
+        "UTG",
+        "MP",
+        "CO",
+        "BTN",
+        "SB"
+      ]
+    },
+    "vs_3bet_options": {
+      "UTG": [
+        "MP",
+        "CO",
+        "BTN",
+        "SB",
+        "BB"
+      ],
+      "MP": [
+        "CO",
+        "BTN",
+        "SB",
+        "BB"
+      ],
+      "CO": [
+        "BTN",
+        "SB",
+        "BB"
+      ],
+      "BTN": [
+        "SB",
+        "BB"
+      ],
+      "SB": [
+        "BB"
+      ]
+    }
+  },
+  "spots": {
+    "RFI": {
+      "UTG": {
+        "33": {
+          "open": 0.01
+        },
+        "44": {
+          "open": 0.06
+        },
+        "55": {
+          "open": 0.2
+        },
+        "66": {
+          "open": 0.27
+        },
+        "77": {
+          "open": 0.72
+        },
+        "88": {
+          "open": 1
+        },
+        "99": {
+          "open": 1
+        },
+        "AA": {
+          "open": 1
+        },
+        "KK": {
+          "open": 1
+        },
+        "QQ": {
+          "open": 1
+        },
+        "JJ": {
+          "open": 1
+        },
+        "TT": {
+          "open": 1
+        },
+        "AKs": {
+          "open": 1
+        },
+        "AQs": {
+          "open": 1
+        },
+        "AJs": {
+          "open": 1
+        },
+        "ATs": {
+          "open": 1
+        },
+        "A9s": {
+          "open": 1
+        },
+        "A8s": {
+          "open": 1
+        },
+        "A7s": {
+          "open": 1
+        },
+        "A6s": {
+          "open": 1
+        },
+        "A5s": {
+          "open": 1
+        },
+        "A4s": {
+          "open": 1
+        },
+        "A3s": {
+          "open": 1
+        },
+        "A2s": {
+          "open": 1
+        },
+        "K7s": {
+          "open": 1
+        },
+        "K8s": {
+          "open": 1
+        },
+        "K9s": {
+          "open": 1
+        },
+        "KTs": {
+          "open": 1
+        },
+        "KJs": {
+          "open": 1
+        },
+        "KQs": {
+          "open": 1
+        },
+        "ATo": {
+          "open": 1
+        },
+        "AJo": {
+          "open": 1
+        },
+        "AQo": {
+          "open": 1
+        },
+        "AKo": {
+          "open": 1
+        },
+        "KQo": {
+          "open": 1
+        },
+        "KJo": {
+          "open": 1
+        },
+        "QJs": {
+          "open": 1
+        },
+        "QTs": {
+          "open": 1
+        },
+        "JTs": {
+          "open": 1
+        },
+        "KTo": {
+          "open": 0.58
+        },
+        "QJo": {
+          "open": 0.22
+        },
+        "T9s": {
+          "open": 0.13
+        },
+        "Q9s": {
+          "open": 0.82
+        },
+        "K6s": {
+          "open": 0.71
+        },
+        "K5s": {
+          "open": 1
+        },
+        "A5o": {
+          "open": 0.22
+        },
+        "54s": {
+          "open": 0.19
+        }
+      },
+      "MP": {
+        "66": {
+          "open": 1
+        },
+        "77": {
+          "open": 1
+        },
+        "88": {
+          "open": 1
+        },
+        "99": {
+          "open": 1
+        },
+        "ATo": {
+          "open": 1
+        },
+        "AJo": {
+          "open": 1
+        },
+        "AQo": {
+          "open": 1
+        },
+        "AKo": {
+          "open": 1
+        },
+        "AA": {
+          "open": 1
+        },
+        "AKs": {
+          "open": 1
+        },
+        "AQs": {
+          "open": 1
+        },
+        "AJs": {
+          "open": 1
+        },
+        "ATs": {
+          "open": 1
+        },
+        "A9s": {
+          "open": 1
+        },
+        "A8s": {
+          "open": 1
+        },
+        "A7s": {
+          "open": 1
+        },
+        "A6s": {
+          "open": 1
+        },
+        "A5s": {
+          "open": 1
+        },
+        "A4s": {
+          "open": 1
+        },
+        "A3s": {
+          "open": 1
+        },
+        "A2s": {
+          "open": 1
+        },
+        "KK": {
+          "open": 1
+        },
+        "KQs": {
+          "open": 1
+        },
+        "KJs": {
+          "open": 1
+        },
+        "KTs": {
+          "open": 1
+        },
+        "K9s": {
+          "open": 1
+        },
+        "K8s": {
+          "open": 1
+        },
+        "K7s": {
+          "open": 1
+        },
+        "K6s": {
+          "open": 1
+        },
+        "K5s": {
+          "open": 1
+        },
+        "K4s": {
+          "open": 1
+        },
+        "KQo": {
+          "open": 1
+        },
+        "QQ": {
+          "open": 1
+        },
+        "QJs": {
+          "open": 1
+        },
+        "QTs": {
+          "open": 1
+        },
+        "Q9s": {
+          "open": 1
+        },
+        "KJo": {
+          "open": 1
+        },
+        "QJo": {
+          "open": 1
+        },
+        "JJ": {
+          "open": 1
+        },
+        "JTs": {
+          "open": 1
+        },
+        "KTo": {
+          "open": 1
+        },
+        "TT": {
+          "open": 1
+        }
+      }
+    },
+    "vs_RFI": {},
+    "vs_3bet": {}
+  }
+}

@@ -16,52 +16,61 @@ const state = {
 };
 
 // ── SLOT POSITIONS BY PLAYER COUNT ───────────────────
+// Slot 0 = hero (bottom center); rest mirrored left↔right around 50%.
+// Tuned for the elongated stadium table: side seats pushed out toward the
+// rounded ends, top/bottom seats on the straight long edges.
+// Verified visually against GG references for 6 / 8 / 9-max.
+// Topmost seats kept at >=16% so the cards tucked ABOVE them stay inside the
+// table (clear of the spot-line title above it). See P-004 / card layout notes.
 const SLOT_POS = {
   6: [
-    { top: '88%', left: '50%' },
-    { top: '78%', left: '80%' },
-    { top: '14%', left: '80%' },
-    { top: '6%',  left: '50%' },
-    { top: '14%', left: '20%' },
-    { top: '78%', left: '20%' },
+    { top: '91%', left: '50%' },
+    { top: '80%', left: '83%' },
+    { top: '22%', left: '83%' },
+    { top: '16%', left: '50%' },
+    { top: '22%', left: '17%' },
+    { top: '80%', left: '17%' },
   ],
   8: [
-    { top: '90%', left: '50%' },
-    { top: '80%', left: '78%' },
+    { top: '91%', left: '50%' },
+    { top: '82%', left: '80%' },
     { top: '50%', left: '95%' },
-    { top: '14%', left: '78%' },
-    { top: '6%',  left: '50%' },
-    { top: '14%', left: '22%' },
+    { top: '18%', left: '80%' },
+    { top: '16%', left: '50%' },
+    { top: '18%', left: '20%' },
     { top: '50%', left: '5%'  },
-    { top: '80%', left: '22%' },
+    { top: '82%', left: '20%' },
   ],
   9: [
-    { top: '90%', left: '50%' },
-    { top: '80%', left: '76%' },
-    { top: '52%', left: '95%' },
-    { top: '20%', left: '86%' },
-    { top: '6%',  left: '62%' },
-    { top: '6%',  left: '38%' },
-    { top: '20%', left: '14%' },
-    { top: '52%', left: '5%'  },
-    { top: '80%', left: '24%' },
+    { top: '92%', left: '50%' },
+    { top: '86%', left: '82%' },
+    { top: '55%', left: '94%' },
+    { top: '22%', left: '84%' },
+    { top: '16%', left: '60%' },
+    { top: '16%', left: '40%' },
+    { top: '22%', left: '16%' },
+    { top: '55%', left: '6%'  },
+    { top: '86%', left: '18%' },
   ],
 };
 
+// Offsets push the posted-blind / bet chip onto open felt in front of a seat,
+// toward the pot. Top seats render their stack pill BELOW the circle (toward
+// center), so their chips need a larger inward (downward) offset to clear it.
 const SLOT_CHIP = {
   6: [
-    [   0, -38], [ -28, -28], [ -28,  28],
-    [   0,  32], [  28,  28], [  28, -28],
+    [   0, -38], [ -28, -28], [ -30,  44],
+    [   0,  50], [  30,  44], [  28, -28],
   ],
   8: [
     [   0, -35], [ -28, -28], [ -42,   0],
-    [ -28,  25], [   0,  30], [  28,  25],
+    [ -30,  42], [   0,  48], [  30,  42],
     [  42,   0], [  28, -28],
   ],
   9: [
     [   0, -35], [ -25, -25], [ -42,   0],
-    [ -32,  22], [ -12,  30], [  12,  30],
-    [  32,  22], [  42,   0], [  25, -25],
+    [ -34,  40], [ -14,  48], [  14,  48],
+    [  34,  40], [  42,   0], [  25, -25],
   ],
 };
 
@@ -104,14 +113,14 @@ window._fetchWithTimeout = fetchWithTimeout;
 // ── BOOT ─────────────────────────────────────────────
 async function boot() {
   try {
-    // Step 1: file list
+    // Step 1: file list (server is the only source — UserStorage path
+    // was removed in the P-001 fix; see docs/problems.md).
     try {
       const listRes   = await fetchWithTimeout('/api/ranges/list');
-      const server    = await listRes.json();
-      state._allFiles = [...server, ...UserStorage.allFileEntries()];
+      state._allFiles = await listRes.json();
     } catch (e) {
       console.warn('Could not load file list:', e);
-      state._allFiles = UserStorage.allFileEntries();
+      state._allFiles = [];
     }
 
     // Step 2: config
@@ -145,30 +154,25 @@ async function boot() {
 }
 
 async function drillLoadConfig(filename) {
+  // All ranges live on the server now (P-001 fix). Prefer /api/ranges —
+  // it returns the full normalized file with a real `spots` dict.
+  // /api/config used to overwrite `spots` with a string list which broke
+  // the Show Range modal, so we fall back to it only if /api/ranges fails.
+  const url = filename
+    ? `/api/ranges?file=${encodeURIComponent(filename)}`
+    : '/api/ranges';
   let data;
-  if (filename && filename.startsWith('user:')) {
-    data = UserStorage.load(filename.slice(5));
-    if (!data) throw new Error('User range not found: ' + filename);
-  } else {
-    // Prefer /api/ranges — it always returns the full normalized file with
-    // a real `spots` dict. /api/config used to overwrite `spots` with a
-    // string list which broke the Show Range modal, so we fall back to it
-    // only if /api/ranges fails. (Falls back transparently for old servers.)
-    const url = filename
-      ? `/api/ranges?file=${encodeURIComponent(filename)}`
-      : '/api/ranges';
-    try {
-      const res = await fetchWithTimeout(url);
-      if (!res.ok) throw new Error('ranges endpoint not ok');
-      data = await res.json();
-    } catch (e) {
-      console.warn('Falling back to /api/config:', e);
-      const cfgUrl = filename
-        ? `/api/config?file=${encodeURIComponent(filename)}`
-        : '/api/config';
-      const res = await fetchWithTimeout(cfgUrl);
-      data = await res.json();
-    }
+  try {
+    const res = await fetchWithTimeout(url);
+    if (!res.ok) throw new Error('ranges endpoint not ok');
+    data = await res.json();
+  } catch (e) {
+    console.warn('Falling back to /api/config:', e);
+    const cfgUrl = filename
+      ? `/api/config?file=${encodeURIComponent(filename)}`
+      : '/api/config';
+    const res = await fetchWithTimeout(cfgUrl);
+    data = await res.json();
   }
   state.config       = data.config || data;
   state.rangeData    = data;
@@ -205,7 +209,14 @@ function drillRenderFormatSelectors() {
   });
 
   select.innerHTML = filtered.length
-    ? filtered.map(f => `<option value="${f.filename}">${f.label || f.stack_depth}</option>`).join('')
+    ? filtered.map(f => {
+        // Filename is the user's chosen identity — lead with it; the
+        // auto-generated label is secondary. Mirrors vizRefreshDepthOptions.
+        const name = f.filename.replace(/\.json$/, '');
+        const meta = (f.label && f.label !== name) ? f.label : (f.stack_depth || '');
+        const text = (meta && meta !== name) ? `${name} · ${meta}` : name;
+        return `<option value="${f.filename}">${text}</option>`;
+      }).join('')
     : '<option value="">No ranges</option>';
   state.selectedFile = filtered.length ? filtered[0].filename : '';
 }
@@ -399,83 +410,141 @@ function renderVillainSection() {
 }
 
 // ── TABLE RENDERING ───────────────────────────────────
+//
+// `renderSeats` is the back-compatible drill entry point — pulls everything
+// it needs from drill's module state. `renderSeatsInto` is the parameterized
+// engine underneath it: takes a full spec and writes to an arbitrary container.
+// learn.js reuses `renderSeatsInto` so Learn Mode gets the same visual table
+// without dragging in drill's state. Both share SLOT_POS / SLOT_CHIP tables.
+
 function renderSeats(context) {
-  const wrap      = document.getElementById('seats');
-  wrap.innerHTML  = '';
-  const positions = getPositions();
-  const { pos: slotArr } = getSlotArrays();
+  renderSeatsInto({
+    seatsId:    'seats',
+    positions:  getPositions(),
+    heroPos:    state.heroPos,
+    spot:       state.spot,
+    villainPos: state.villainPos,
+    stacks:     context?.stacks,
+  });
+}
+
+function renderSeatsInto(spec) {
+  const wrap = document.getElementById(spec.seatsId);
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const positions = spec.positions;
+  const n = positions.length;
+  const heroIdx = positions.indexOf(spec.heroPos);
+  const slotArr = SLOT_POS[n] || SLOT_POS[6];
+
+  // Optional set of folded positions. When absent, every opponent is active
+  // (shows card-backs). Engine-driven fold state is a later step.
+  const folded = spec.folded instanceof Set ? spec.folded : null;
 
   positions.forEach(pos => {
-    const isHero    = pos === state.heroPos;
-    const isVillain = state.spot !== 'RFI' && pos === state.villainPos;
+    const isHero    = pos === spec.heroPos;
+    const isVillain = spec.spot !== 'RFI' && pos === spec.villainPos;
     const isDealer  = pos === 'BTN';
-    const slot      = slotForPos(pos);
+    const isFolded  = !isHero && folded?.has(pos);
+    const posIdx    = positions.indexOf(pos);
+    const slot      = (heroIdx - posIdx + n) % n;
     const sp        = slotArr[slot] || { top: '50%', left: '50%' };
 
     const seat = document.createElement('div');
-    seat.className   = 'seat';
+    seat.className   = 'seat' + (isFolded ? ' is-folded' : '');
     seat.dataset.pos = pos;
     seat.style.top   = sp.top;
     seat.style.left  = sp.left;
 
+    // Universal layout: hole cards tucked behind the avatar ABOVE the position
+    // token, stack BELOW it — same for every seat. Hero's hand is the separate
+    // .hero-cards element below the table, so hero has no cards on the seat.
+    const avatar = document.createElement('div');
+    avatar.className = 'seat-avatar';
+    if (!isHero) {
+      const cardsEl = document.createElement('div');
+      cardsEl.className = 'seat-cards';
+      cardsEl.innerHTML = '<div class="mini-back b1"></div><div class="mini-back b2"></div>';
+      avatar.appendChild(cardsEl);
+    }
     const circle = document.createElement('div');
     circle.className = 'seat-circle'
       + (isHero    ? ' is-hero'    : '')
       + (isVillain ? ' is-villain' : '')
       + (isDealer  ? ' is-dealer'  : '');
-    circle.textContent = pos;
-
-    const name = document.createElement('div');
-    name.className = 'seat-name' + (isHero ? ' is-hero' : '');
-    name.textContent = isHero ? 'YOU' : (isVillain ? 'VILLAIN' : pos);
+    circle.textContent = pos;   // position is the player's identity (no avatar art)
+    avatar.appendChild(circle);
 
     const stack = document.createElement('div');
     stack.className = 'seat-stack';
-    const stackBB = context?.stacks?.[pos] ?? 100;
+    const stackBB = spec.stacks?.[pos] ?? 100;
     stack.textContent = stackBB.toFixed(1) + ' BB';
 
-    seat.appendChild(circle);
-    seat.appendChild(name);
+    // Hero gets a label; opponents are identified by the position in the token,
+    // so no redundant position label under them.
+    seat.appendChild(avatar);
+    if (isHero) {
+      const nameEl = document.createElement('div');
+      nameEl.className = 'seat-name is-hero';
+      nameEl.textContent = 'Hero';
+      seat.appendChild(nameEl);
+    }
     seat.appendChild(stack);
     wrap.appendChild(seat);
   });
 }
 
+// Chip helpers (chipBetStack, chipMakeChange, …) live in chips.js, loaded
+// before this file — shared with postflop.js (single source of truth).
 function renderChips(context) {
-  document.querySelectorAll('.bet-chip').forEach(c => c.remove());
+  document.querySelectorAll('.chip-stack, .chip-pot').forEach(c => c.remove());
   if (!context) return;
 
   const tableWrap = document.querySelector('.table-wrap');
-  const W = 560, H = 360;
+  // Measure the live table so chips track it when scaled down on mobile.
+  // SLOT_CHIP offsets were tuned for the 680x330 desktop table, so we scale
+  // those px nudges by the same factor. On desktop rect == 680x330 → scale 1.
+  const rect = tableWrap.getBoundingClientRect();
+  const W = rect.width  || 680;
+  const H = rect.height || 330;
+  const sx = W / 680, sy = H / 330;
   const { pos: slotArr, chip: chipArr } = getSlotArrays();
 
-  function addChip(pos, text, cls) {
-    const slot  = slotForPos(pos);
-    const sp    = slotArr[slot]  || { top: '50%', left: '50%' };
-    const off   = chipArr[slot] || [0, 0];
-    const top   = parseFloat(sp.top)  / 100 * H + off[1];
-    const left  = parseFloat(sp.left) / 100 * W + off[0];
-
-    const chip = document.createElement('div');
-    chip.className   = `bet-chip ${cls}`;
-    chip.textContent = text;
-    chip.style.top   = top  + 'px';
-    chip.style.left  = left + 'px';
-    tableWrap.appendChild(chip);
+  // Place a bet stack on the open felt in front of `pos`.
+  function addBet(pos, amount) {
+    const slot = slotForPos(pos);
+    const sp   = slotArr[slot] || { top: '50%', left: '50%' };
+    const off  = chipArr[slot] || [0, 0];
+    const stack = chipBetStack(amount);
+    stack.style.top  = (parseFloat(sp.top)  / 100 * H + off[1] * sy) + 'px';
+    stack.style.left = (parseFloat(sp.left) / 100 * W + off[0] * sx) + 'px';
+    tableWrap.appendChild(stack);
   }
 
-  addChip('SB', '0.5', 'chip-sb');
-  addChip('BB', '1',   'chip-bb');
+  // Preflop: money is still IN FRONT of players (blinds + open + 3bet) — it
+  // hasn't been collected into a central pot yet, so we do NOT also draw pot
+  // chips in the middle (that would double-count the blinds). The pot SIZE is
+  // shown by the .pot-block text. Centre chip stacks belong to postflop, where
+  // previous-street bets are actually gathered into the pot.
+  addBet('SB', 0.5);
+  addBet('BB', 1);
   if (context.open_raiser && context.open_size)
-    addChip(context.open_raiser, context.open_size.toFixed(1), 'chip-open');
+    addBet(context.open_raiser, context.open_size);
   if (context.threebet_raiser && context.threebet_size)
-    addChip(context.threebet_raiser, context.threebet_size.toFixed(1), 'chip-3bet');
+    addBet(context.threebet_raiser, context.threebet_size);
 }
 
 // ── CARDS ─────────────────────────────────────────────
+// Back-compat drill entry point. `renderCardsInto` underneath accepts target
+// IDs so learn.js can render into its own card DOM.
 function renderCards(card1, card2) {
-  const c1 = document.getElementById('card1');
-  const c2 = document.getElementById('card2');
+  renderCardsInto(card1, card2, 'card1', 'card2');
+}
+
+function renderCardsInto(card1, card2, c1Id, c2Id) {
+  const c1 = document.getElementById(c1Id);
+  const c2 = document.getElementById(c2Id);
+  if (!c1 || !c2) return;
 
   if (!card1) {
     c1.className = 'card card-back';
@@ -488,15 +557,27 @@ function renderCards(card1, card2) {
   [{ el: c1, str: card1 }, { el: c2, str: card2 }].forEach(({ el, str }, i) => {
     const suit = str.slice(-1);
     const rank = str.slice(0, -1);
+    const url = cardSvgUrl(str);
+    el.style.animationDelay = i * 0.08 + 's';
+
+    if (url) {
+      // Recolored 4-color SVG asset (see docs/roadmap.md B.1-cards).
+      el.className = 'card card-svg deal-in';
+      el.innerHTML = `<img src="${url}" alt="${str}" draggable="false">`;
+      return;
+    }
+    // Fallback: legacy CSS-drawn card if the code can't be mapped.
     const isRed = '♥♦'.includes(suit);
     el.className = `card card-front ${isRed ? 'red' : 'black'} deal-in`;
-    el.style.animationDelay = i * 0.08 + 's';
     el.innerHTML = `
       <div class="card-corner">${rank}<br>${suit}</div>
       <div class="card-center">${suit}</div>
     `;
   });
 }
+
+// cardSvgUrl() now lives in cards.js (loaded before this file) — shared with
+// postflop.js so the SVG asset mapping has a single source of truth.
 
 // ── ACTION BUTTONS ────────────────────────────────────
 function renderActionButtons(actions) {
@@ -841,11 +922,11 @@ function colorHintCell(cell, value, type, spot) {
       cell.style.background = bg;
       cell.style.color      = fg;
     } else {
-      cell.style.background = _hintGradient(value, { open:'#2E7D32', call:'#3F7FB5', fold:'#232b26' }, ['open','call','fold']);
+      cell.style.background = _hintGradient(value, { open:'#2E7D32', call:'#3F7FB5', fold:'#1e2a22' }, ['open','call','fold']);
       cell.style.color      = '#fff';
     }
   } else {
-    const colors = { '3bet':'#F44336', call:'#3F7FB5', '4bet':'#c0392b', fold:'#232b26' };
+    const colors = { '3bet':'#F44336', call:'#3F7FB5', '4bet':'#c0392b', fold:'#1e2a22' };
     const order  = spot === 'vs_3bet' ? ['4bet','call','fold'] : ['3bet','call','fold'];
     cell.style.background = _hintGradient(value, colors, order);
     cell.style.color      = '#fff';
@@ -871,7 +952,7 @@ function updateSpotLine() {
 }
 
 // ── TIMER ─────────────────────────────────────────────
-const ARC_LEN = 1340; // approximate ellipse circumference in SVG units
+const ARC_LEN = 1624; // stadium-ring perimeter in SVG units (matches #timerArc rect)
 
 function startTimer() {
   state.timer.left  = state.timer.total;
@@ -973,10 +1054,9 @@ function clearAutoNext() {
 async function drillRefreshFileList() {
   try {
     const res    = await fetch('/api/ranges/list');
-    const server = await res.json();
-    state._allFiles = [...server, ...UserStorage.allFileEntries()];
+    state._allFiles = await res.json();
   } catch (e) {
-    state._allFiles = UserStorage.allFileEntries();
+    state._allFiles = [];
   }
   drillRenderFormatSelectors();
 }

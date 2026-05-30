@@ -35,6 +35,34 @@ AGAIN, HARD, GOOD, EASY = 1, 2, 3, 4
 
 
 # ---------------------------------------------------------------------------
+# Hand universe — all 169 unique starting hands in canonical notation
+# ---------------------------------------------------------------------------
+
+# Ranks high to low. Same convention used everywhere else in the project:
+# higher card first, then "s" or "o" for non-pairs ("AKs", "T9o", "22").
+_RANKS = "AKQJT98765432"
+
+
+def _all_169_hands() -> list[str]:
+    """All 169 starting-hand classes in deck-friendly order.
+
+    Returns pairs first (AA..22), then suited (AKs..32s), then offsuit
+    (AKo..32o). Within each group, stronger hands (by high card) come first
+    so that fresh-deck sessions naturally surface big hands before junk —
+    a small UX nicety, not a correctness requirement.
+    """
+    pairs = [f"{r}{r}" for r in _RANKS]
+    suited: list[str] = []
+    offsuit: list[str] = []
+    for i in range(len(_RANKS)):
+        for j in range(i + 1, len(_RANKS)):
+            hi, lo = _RANKS[i], _RANKS[j]
+            suited.append(f"{hi}{lo}s")
+            offsuit.append(f"{hi}{lo}o")
+    return pairs + suited + offsuit
+
+
+# ---------------------------------------------------------------------------
 # Card model
 # ---------------------------------------------------------------------------
 
@@ -67,6 +95,18 @@ class Card:
     consecutive_correct: int = 0     # streak; reset to 0 on Again
     total_seen: int = 0
     total_correct: int = 0           # any rating ≥ HARD counts as correct
+
+    # Per-review log. Each entry: {date, delta_days, rating, correct}.
+    #   date         — ISO date of the review
+    #   delta_days   — days since previous review (0 for first ever)
+    #   rating       — 1=AGAIN, 2=HARD, 3=GOOD, 4=EASY
+    #   correct      — True if rating > AGAIN (the user remembered it at all)
+    # Written by ``update_card`` before any state mutation, so the entry
+    # captures the *actual* interval that elapsed for this review, which is
+    # what future FSRS calibration (Track A.4) will fit against.
+    # Empty by default — old state files without this field load cleanly
+    # thanks to ``default_factory``.
+    history: list[dict] = field(default_factory=list)
 
     def is_new(self) -> bool:
         return self.total_seen == 0
@@ -120,7 +160,11 @@ def _make_card(
     )
 
 
-def init_cards_from_spots(spots_data: dict, scope: tuple[str, ...] | None = None) -> list[Card]:
+def init_cards_from_spots(
+    spots_data: dict,
+    scope: tuple[str, ...] | None = None,
+    fill_implicit_fold: bool = True,
+) -> list[Card]:
     """
     Build a flat list of new Cards from the full ``spots`` dict of a range file.
 
@@ -133,20 +177,45 @@ def init_cards_from_spots(spots_data: dict, scope: tuple[str, ...] | None = None
     Pass ``scope`` to restrict to specific spot types, e.g. ``("RFI",)`` for an
     RFI-only MVP deck. Default = all three spots.
 
-    Hands not listed in the range are implicit folds and are SKIPPED — we don't
-    drill obvious folds. Hands with explicit fractional strategy are kept and
-    normalized so frequencies sum to 1.
+    When ``fill_implicit_fold=True`` (default), every (position, spot[, villain])
+    tuple that has at least one explicit entry is auto-completed to all 169
+    starting hands — hands missing from the source range become pure-fold cards
+    with strategy ``{"fold": 1.0}``. This makes Learn-mode decks cover both
+    "remember to open" AND "remember to fold trash" decisions, which is closer
+    to actual at-the-table demands than drilling only the open range.
+
+    Set ``fill_implicit_fold=False`` to keep only explicit entries (legacy
+    behaviour — used by ``init_cards_from_ranges`` and by tests that want the
+    raw, non-expanded shape).
+
+    An empty position block (e.g. ``{"UTG": {}}``) is treated as "undefined,
+    skip" — we don't blow it up into 169 fold-cards because the user clearly
+    hasn't decided what to put there yet.
+
+    Hands with explicit fractional strategy are kept and normalized so
+    frequencies sum to 1 (the existing ``_make_card`` behaviour, unchanged).
     """
     if scope is None:
         scope = ("RFI", "vs_RFI", "vs_3bet")
 
     cards: list[Card] = []
+    all_hands = _all_169_hands() if fill_implicit_fold else ()
+
+    def _expand(hero_pos: str, spot: str, villain_pos: str, explicit: set[str]) -> None:
+        """Append fold-cards for every hand in the 169-universe not in ``explicit``."""
+        for h in all_hands:
+            if h not in explicit:
+                cards.append(_make_card(h, hero_pos, spot, villain_pos, {"fold": 1.0}))
 
     # RFI — flat: position -> hand -> strategy
     if "RFI" in scope:
         for position, hands in spots_data.get("RFI", {}).items():
+            if not hands:                       # empty block = "not defined yet"
+                continue
             for hand, strategy in hands.items():
                 cards.append(_make_card(hand, position, "RFI", "", strategy))
+            if fill_implicit_fold:
+                _expand(position, "RFI", "", set(hands.keys()))
 
     # vs_RFI and vs_3bet share the same nested shape
     for spot_name in ("vs_RFI", "vs_3bet"):
@@ -154,10 +223,14 @@ def init_cards_from_spots(spots_data: dict, scope: tuple[str, ...] | None = None
             continue
         for hero_pos, vs_dict in spots_data.get(spot_name, {}).items():
             for vs_key, hands in vs_dict.items():
+                if not hands:                   # empty (hero, villain) block — skip
+                    continue
                 # "vs_UTG" -> "UTG"
                 villain_pos = vs_key[3:] if vs_key.startswith("vs_") else vs_key
                 for hand, strategy in hands.items():
                     cards.append(_make_card(hand, hero_pos, spot_name, villain_pos, strategy))
+                if fill_implicit_fold:
+                    _expand(hero_pos, spot_name, villain_pos, set(hands.keys()))
 
     return cards
 
@@ -165,8 +238,13 @@ def init_cards_from_spots(spots_data: dict, scope: tuple[str, ...] | None = None
 # Back-compat alias for the original narrow signature (RFI-only flat dict)
 def init_cards_from_ranges(ranges: dict) -> list[Card]:
     """Legacy entry point: takes a flat ``{position: {hand: strategy}}`` dict
-    and treats it as RFI scope. Prefer ``init_cards_from_spots`` for new code."""
-    return init_cards_from_spots({"RFI": ranges}, scope=("RFI",))
+    and treats it as RFI scope. Prefer ``init_cards_from_spots`` for new code.
+
+    Does NOT auto-expand missing hands to fold-cards — preserves the original
+    "only explicit entries become cards" semantics so existing callers
+    (and their tests) keep working.
+    """
+    return init_cards_from_spots({"RFI": ranges}, scope=("RFI",), fill_implicit_fold=False)
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +289,20 @@ def update_card(card: Card, rating: int, today: date | None = None) -> Card:
 
     if today is None:
         today = date.today()
+
+    # Log this review BEFORE mutating last_seen — we need the previous
+    # last_seen to compute delta_days (0 for first review). See Card.history
+    # docstring for the entry shape.
+    if card.last_seen:
+        delta_days = (today - date.fromisoformat(card.last_seen)).days
+    else:
+        delta_days = 0
+    card.history.append({
+        "date":       today.isoformat(),
+        "delta_days": delta_days,
+        "rating":     rating,
+        "correct":    rating > AGAIN,
+    })
 
     card.total_seen += 1
     card.last_seen = today.isoformat()
@@ -257,6 +349,47 @@ def update_card(card: Card, rating: int, today: date | None = None) -> Card:
         card.ease_factor = card.ease_factor + 0.15
 
     card.next_review = (today + timedelta(days=card.interval_days)).isoformat()
+    return card
+
+
+def upgrade_good_to_easy(card: Card, today: date | None = None) -> Card:
+    """
+    Upgrade a card's just-applied GOOD rating to EASY.
+
+    Used when the user clicks "Easy" in the Learn reveal screen *after*
+    already submitting an in-strategy action that was graded as GOOD by
+    ``update_card``. We apply the multiplicative GOOD→EASY delta:
+
+      - ``interval_days`` × 1.3 (clamped to at least +1 day so a trivial
+        card actually moves forward; otherwise rounding could leave it
+        unchanged on small intervals)
+      - ``ease_factor`` + 0.15
+
+    Notes:
+      - This is intentionally approximate. Calling ``update_card(EASY)``
+        from a fresh state vs.\ ``update_card(GOOD)`` then this upgrade
+        can differ by ~1 day on the first review. We accept that — SM-2
+        is a heuristic, and buffering pre-update state across two HTTP
+        calls is more complexity than the precision is worth.
+      - ``next_review`` is recomputed from ``today`` + new interval.
+    """
+    if today is None:
+        today = date.today()
+    card.interval_days = max(
+        card.interval_days + 1,
+        int(round(card.interval_days * 1.3)),
+    )
+    card.ease_factor = card.ease_factor + 0.15
+    card.next_review = (today + timedelta(days=card.interval_days)).isoformat()
+
+    # History fix-up: the most recent entry was logged as GOOD by update_card.
+    # Conceptually the user just reclassified that answer as EASY, so we
+    # mutate the last entry's rating rather than appending a new event —
+    # otherwise calibration would see two reviews on the same day.
+    if card.history:
+        card.history[-1]["rating"]  = EASY
+        card.history[-1]["correct"] = True
+
     return card
 
 

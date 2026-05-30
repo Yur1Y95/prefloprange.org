@@ -22,9 +22,9 @@ Thumbs.db
 # Claude Code local overrides
 .claude/settings.local.json
 
-# Local runtime artefacts (uncomment if you'd rather keep these out of git)
-# stats.json
-# history.json
+# Local runtime artefacts — personal training data, keep out of git
+stats.json
+history.json
 
 # Large hand-history data (too big for GitHub, kept local only)
 parsed/

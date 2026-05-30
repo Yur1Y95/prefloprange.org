@@ -65,7 +65,7 @@ def test_init_rfi_only():
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["initialized"] is True
-    assert body["total"] == 597, f"expected 597 RFI cards, got {body['total']}"
+    assert body["total"] == 1183, f"expected 1183 RFI cards (7 positions × 169), got {body['total']}"
     print(f"  PASS  init RFI-only ({body['total']} cards)")
 
 
@@ -88,8 +88,8 @@ def test_status_after_init():
     assert r.status_code == 200
     body = r.json()
     assert body["initialized"] is True
-    assert body["total"] == 597
-    assert body["new"] == 597        # all cards are new initially
+    assert body["total"] == 1183
+    assert body["new"] == 1183       # all cards are new initially
     assert body["learned"] == 0
     print(f"  PASS  status reflects fresh deck (new={body['new']})")
 
@@ -230,17 +230,64 @@ def test_full_session_flow():
     assert "next" in body
 
     # Two correctness checks (no naive -1 assertion — the queue refills from
-    # the 597-card new pool as cards get answered, so size stays ~constant):
+    # the 1183-card new pool as cards get answered, so size stays ~constant):
     # 1. The next card returned is DIFFERENT from the one we just answered
     next_card = body["next"]
     if next_card:
         assert next_card["card_id"] != card1_id
     # 2. Total deck is unchanged
     status = client.get("/api/srs/status", params={"file": RANGE_FILE_NAME}).json()
-    assert status["total"] == 597
+    assert status["total"] == 1183
     # 3. The card we answered is no longer "new"
-    assert status["new"] == 596
-    print(f"  PASS  full flow: answered 1 card, deck now new=596 (was 597)")
+    assert status["new"] == 1182
+    print(f"  PASS  full flow: answered 1 card, deck now new=1182 (was 1183)")
+
+
+def test_upgrade_easy_after_good_answer():
+    """Reveal-screen Easy click: answer correctly (GOOD applied), then call
+    /upgrade_easy and verify the card's interval and ease bumped per the
+    GOOD→EASY delta."""
+    # Fresh deck so AA UTG is new (interval=0, ease=2.5)
+    client.post("/api/srs/init", json={
+        "file": RANGE_FILE_NAME, "scope": ["RFI"], "force": True,
+    })
+
+    # Step 1: answer correctly to apply GOOD
+    r1 = client.post("/api/srs/answer", json={
+        "file": RANGE_FILE_NAME,
+        "card_id": "AA__UTG__RFI",
+        "user_action": "open",
+        "marked_easy": False,
+    })
+    assert r1.status_code == 200, r1.text
+    g = r1.json()["grading"]
+    assert g["rating"] == 3, f"expected GOOD, got rating={g['rating']}"
+    # After GOOD on a new card: interval=1, ease=2.5
+    card_after_good = r1.json()["card"]
+    assert card_after_good["interval_days"] == 1
+
+    # Step 2: click Easy in the reveal — upgrade to EASY
+    r2 = client.post("/api/srs/upgrade_easy", json={
+        "file": RANGE_FILE_NAME,
+        "card_id": "AA__UTG__RFI",
+    })
+    assert r2.status_code == 200, r2.text
+    body = r2.json()
+    # Delta: max(1+1, round(1*1.3)=1) = 2, ease 2.5 + 0.15 = 2.65
+    assert body["interval_days"] == 2, f"expected 2, got {body['interval_days']}"
+    assert abs(body["ease_factor"] - 2.65) < 1e-9
+    print(f"  PASS  upgrade_easy: AA UTG GOOD→EASY, interval 1→{body['interval_days']}, ease 2.5→{body['ease_factor']:.2f}")
+
+
+def test_upgrade_easy_on_uninitialized_deck_404s():
+    """No deck → 404, never silently creates a card from thin air."""
+    client.post("/api/srs/reset", params={"file": RANGE_FILE_NAME})
+    r = client.post("/api/srs/upgrade_easy", json={
+        "file": RANGE_FILE_NAME,
+        "card_id": "AA__UTG__RFI",
+    })
+    assert r.status_code == 404, r.text
+    print("  PASS  upgrade_easy on uninitialized deck returns 404")
 
 
 def test_path_traversal_rejected():

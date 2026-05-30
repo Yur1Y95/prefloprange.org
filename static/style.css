@@ -1,11 +1,12 @@
 /* ── DESIGN TOKENS ─────────────────────────────────── */
 :root {
   --bg:           #080d0a;
-  --felt:         #183d26;
-  --felt-hi:      #1e4d30;
-  --felt-shadow:  #0a1f12;
-  --rim:          #2e1505;
-  --rim-hi:       #5a3210;
+  --felt:         #1d6b40;            /* vivid casino green base */
+  --felt-hi:      #379a59;            /* lit center of the felt */
+  --felt-shadow:  #0b3a21;            /* darkened toward the rail */
+  --felt-line:    rgba(150,225,180,.22); /* betting line ring near edge — faint sheen */
+  --rim:          #161616;            /* black padded rail */
+  --rim-hi:       #353535;            /* rail top highlight */
   --panel:        #0d1510;
   --panel-border: rgba(255,255,255,.06);
   --gold:         #c9a84c;
@@ -244,48 +245,66 @@ body {
   color: var(--text-dim);
 }
 
-/* Table oval */
+/* Table — stadium / racetrack shape (elongated ~2:1, not a circle).
+   border-radius:9999px makes CSS cap the radius at half the height → clean
+   stadium at any box size (handy for future responsive scaling). */
 .table-wrap {
   position: relative;
-  width: 560px;
-  height: 360px;
+  width: 680px;
+  height: 330px;
   flex-shrink: 0;
 }
+/* Black padded rail — volumetric: lit at the top edge, dark and shadowed
+   at the bottom, with an outer drop shadow that lifts the table off the bg. */
 .table-rim {
   position: absolute;
   inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at 40% 30%, var(--rim-hi), var(--rim) 60%, #1a0800);
+  border-radius: 9999px;
+  background:
+    linear-gradient(to bottom, var(--rim-hi) 0%, var(--rim) 42%, #050505 100%);
   box-shadow:
-    0 0 0 2px #1a0800,
-    0 10px 50px rgba(0,0,0,.9),
-    inset 0 1px 3px rgba(255,255,255,.1);
+    0 14px 44px rgba(0,0,0,.75),            /* table lifts off the page */
+    0 0 0 1px #000,                         /* crisp outer edge */
+    inset 0 2px 2px rgba(255,255,255,.14),  /* top highlight on the rail */
+    inset 0 -4px 8px rgba(0,0,0,.65);       /* rail rounds away at the bottom */
 }
+/* Vivid casino felt: lit in the center, falling off to a dark vignette near
+   the rail. A dark seam at the very edge separates felt from the black rail. */
 .table-felt {
   position: absolute;
   inset: 16px;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at 45% 38%, var(--felt-hi), var(--felt) 50%, var(--felt-shadow));
-  box-shadow: inset 0 0 80px rgba(0,0,0,.55);
+  border-radius: 9999px;
+  background:
+    radial-gradient(ellipse 76% 92% at 50% 40%,
+      var(--felt-hi)     0%,
+      var(--felt)        46%,
+      var(--felt-shadow) 100%);
+  box-shadow:
+    inset 0 0 70px rgba(0,0,0,.45),         /* soft vignette toward the rail */
+    inset 0 2px 5px rgba(0,0,0,.55),        /* shadow cast by the rail above */
+    0 0 0 2px rgba(0,0,0,.45);              /* dark seam at the felt edge */
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-/* Subtle grid texture */
+/* Betting line — the lit ring just inside the rail, like a real casino table.
+   (Replaces the old grid-texture placeholder.) */
 .table-felt::before {
   content: '';
   position: absolute;
-  inset: 0;
-  background:
-    repeating-linear-gradient(0deg,   transparent, transparent 36px, rgba(255,255,255,.015) 36px, rgba(255,255,255,.015) 37px),
-    repeating-linear-gradient(90deg,  transparent, transparent 36px, rgba(255,255,255,.015) 36px, rgba(255,255,255,.015) 37px);
-  border-radius: 50%;
+  inset: 13px;
+  border-radius: 9999px;
+  border: 1px solid var(--felt-line);
+  box-shadow: 0 1px 1px rgba(0,0,0,.25);    /* line sits in the felt */
+  pointer-events: none;
 }
 
+/* Action log sits just above the pot in open felt — clear of the top seats,
+   which used to collide with it when it was pinned to the felt's top edge. */
 .action-log {
   position: absolute;
-  top: 22px;
+  top: 34%;
   left: 50%;
   transform: translateX(-50%);
   font-size: 10px;
@@ -294,7 +313,7 @@ body {
   letter-spacing: .5px;
   white-space: nowrap;
   z-index: 2;
-  max-width: 380px;
+  max-width: 460px;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -337,6 +356,41 @@ body {
 
 /* Seat positions are set dynamically in JS (hero always at bottom center) */
 
+/* Folded player: cards hidden (via JS) + whole seat dims */
+.seat.is-folded { opacity: .34; filter: grayscale(.6); }
+
+/* Hole cards tucked BEHIND the avatar, peeking out toward the board — like GG.
+   Hero shows real cards in the separate .hero-cards element, so hero has none. */
+.seat-avatar { position: relative; }
+.seat-cards {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  z-index: 0;            /* behind the avatar token (circle is z-index 1) */
+}
+/* Universal: cards always above the position token, stack always below it. */
+.seat-cards { bottom: 30px; }
+.seat.is-folded .seat-cards { visibility: hidden; }
+.mini-back {
+  width: 28px; height: 39px;
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(45deg, rgba(0,0,0,.18) 0 3px, rgba(255,255,255,.05) 3px 6px),
+    linear-gradient(135deg, #1d3a6e 0%, #0a1428 100%);
+  border: 1px solid rgba(120,160,220,.38);
+  box-shadow: 0 2px 8px rgba(0,0,0,.55);
+  position: relative;
+}
+.mini-back::after {
+  content: '';
+  position: absolute; inset: 3px;
+  border-radius: 3px;
+  border: 1px solid rgba(150,185,235,.30);
+}
+.mini-back.b1 { transform: rotate(-8deg) translateX(5px); }
+.mini-back.b2 { transform: rotate(8deg) translateX(-5px); margin-left: -9px; }
+
 .seat-circle {
   width: 46px; height: 46px;
   border-radius: 50%;
@@ -352,6 +406,7 @@ body {
   letter-spacing: .5px;
   box-shadow: 0 2px 8px rgba(0,0,0,.5);
   position: relative;
+  z-index: 1;            /* sits on top of the tucked-in hole cards */
 }
 .seat-circle.is-hero {
   border-color: var(--gold);
@@ -386,13 +441,25 @@ body {
   text-transform: uppercase;
 }
 .seat-name.is-hero { color: var(--gold); }
+/* Stack reads on any felt color: light text on a subtle dark pill (same
+   language as .pot-block). The opaque pill also masks the betting line
+   passing behind it, so the ring no longer "cuts" the number. */
 .seat-stack {
   font-family: var(--font-ui);
-  font-size: 9px;
-  color: #3a5a44;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: .3px;
+  background: rgba(0,0,0,.45);
+  padding: 1px 8px;
+  border-radius: 9999px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.45);
 }
 
-/* Bet chips on table */
+/* ── LEGACY bet chips (flat tokens) ──────────────────────────────────
+   Kept for the FROZEN postflop module (postflop.js still uses
+   .bet-chip .chip-open). Drill/Learn now use the denominated chip-stack
+   system below. Don't extend these — see docs/design.md "Фишки". */
 .bet-chip {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -412,8 +479,66 @@ body {
 .chip-open { background: #0d3560; border: 2px solid #3a80c0; color: #7ec8ff; }
 .chip-3bet { background: #4a0d18; border: 2px solid #c0392b; color: #ff7a8a; }
 
-/* Chip offsets toward center per seat */
-/* We position chips programmatically in JS, so just define the class */
+/* ── DENOMINATED CHIP STACKS ──────────────────────────────────────────
+   Cash model: a bet is a stack of denominated discs (colour = denom,
+   all discs one diameter). The pot is the same discs grouped per denom
+   into stacks side by side. Built in JS (renderChips, drill.js); see the
+   reference prototype static/chips_preview.html and docs/design.md.   */
+.chip-stack, .chip-pot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+.chip-stack { z-index: 7; }          /* player bets sit above seats (z 6) */
+.chip-pot   { z-index: 4; gap: 5px; } /* collected pot, just under POT text */
+
+.coins { position: relative; }
+.coin {
+  position: absolute; left: 0;
+  width: var(--cw, 19px); height: var(--ch, 8px);
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(255,255,255,.30), rgba(255,255,255,0) 55%),
+    repeating-conic-gradient(from var(--rot,0deg),
+      var(--edge) 0deg 16deg, var(--body) 16deg 60deg);
+  box-shadow:
+    inset 0 1.5px 1px rgba(255,255,255,.30),
+    inset 0 -2.5px 2.5px rgba(0,0,0,.55),
+    0 1px 1px rgba(0,0,0,.6);
+  border: 1px solid rgba(0,0,0,.5);
+}
+/* inlay + denomination, only on the top (fully visible) disc */
+.coin.top::after {
+  content: attr(data-d);
+  position: absolute; inset: 13% 15%;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(255,255,255,.30), rgba(255,255,255,0) 60%),
+    var(--inlay);
+  border: 1px solid var(--ring);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-ui); font-weight: 800; color: var(--ink);
+  font-size: 5.5px; letter-spacing: -.2px;
+}
+/* denomination palettes (anchors: white=1, red=5, green=25) */
+.d-01 { --body:#54606a; --edge:#aab4bd; --inlay:#3f4a53; --ink:#e6edf2; --ring:#cfd8df; }
+.d-05 { --body:#1d5a8a; --edge:#6cc0f0; --inlay:#16466f; --ink:#e3f4ff; --ring:#8fd2ff; }
+.d-1  { --body:#d8d8d8; --edge:#7c7c7c; --inlay:#f4f4f4; --ink:#222;    --ring:#ffffff; }
+.d-5  { --body:#a3182a; --edge:#ec5a6e; --inlay:#7e1320; --ink:#ffe2e6; --ring:#ff8a98; }
+.d-25 { --body:#15743a; --edge:#56c47e; --inlay:#0e5a2c; --ink:#dcffe8; --ring:#7fe0a2; }
+
+.pot-row { display: flex; gap: 4px; align-items: flex-end; }
+/* amount pill under a player bet stack */
+.chip-amt {
+  margin-top: 5px;
+  font-family: var(--font-ui); font-size: 11px; font-weight: 700;
+  color: var(--text); letter-spacing: .3px;
+  background: rgba(0,0,0,.5); border-radius: 9999px;
+  padding: 1px 8px; box-shadow: 0 1px 3px rgba(0,0,0,.5); white-space: nowrap;
+}
 
 /* ── HERO CARDS ─────────────────────────────────────── */
 .hero-cards {
@@ -450,6 +575,18 @@ body {
 }
 .card-front {
   background: #fff;
+}
+/* SVG-asset face (recolored 4-color deck). The SVG carries its own white face,
+   border and rounded corners, so the .card box just clips and shadows it. */
+.card-svg {
+  background: transparent;
+  overflow: hidden;
+}
+.card-svg img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
 }
 .card-front.red { color: #cc1111; }
 .card-front.black { color: #111; }
@@ -783,6 +920,12 @@ body {
   cursor: default;
   transition: filter .1s, transform .1s;
   background: #1e2a22;
+  /* Clip background to padding-box so the `to right` frequency gradient does
+     not bleed a 1px green sliver under the semi-transparent border at the
+     right edge (Chromium gradient+border edge artifact = the "green tail").
+     !important: JS sets the `background` shorthand inline, which would reset
+     background-clip to border-box and re-introduce the artifact. */
+  background-clip: padding-box !important;
   overflow: hidden;
   position: relative;
 }
@@ -1362,4 +1505,449 @@ body {
   letter-spacing: 1px;
   color: var(--text-mid);
   text-align: center;
+}
+
+/* ── LEARN MODE ──────────────────────────────────────────
+   Learn uses .layout (for the flex-1 fill-the-viewport behaviour) but
+   overrides its 3-column grid: Stage 1 just centers a placeholder, and
+   Stages 2+ will toggle one of three full-width sections (entry/card/
+   reveal). Sections become flex columns so their inner .coming-soon /
+   future content can use flex:1 + center the way Analyzer does. */
+#learnMode {
+  grid-template-columns: 1fr;
+}
+#learnMode > section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Entry screen — centered card with deck picker, scope, counters, actions */
+.learn-entry-card {
+  background: var(--panel-bg, #1a1a1a);
+  border: 1px solid var(--panel-border, #2a2a2a);
+  border-radius: 10px;
+  padding: 24px 28px;
+  min-width: 420px;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.learn-entry-title {
+  margin: 0 0 4px;
+  font-family: var(--font-ui);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  text-align: center;
+}
+.learn-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.learn-label {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--text-mid);
+  text-transform: uppercase;
+}
+.learn-scope-locked-hint {
+  font-size: 11px;
+  color: var(--text-mid);
+  font-style: italic;
+  margin-top: 2px;
+}
+.learn-counters {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 2px;
+}
+.learn-counter {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  padding: 10px 4px;
+  text-align: center;
+}
+.lc-num {
+  font-family: var(--font-ui);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-bright, #e7e2c5);
+  line-height: 1;
+}
+.lc-label {
+  font-family: var(--font-ui);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--text-mid);
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+.learn-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.learn-start-btn {
+  padding: 12px 16px;
+  border-radius: 6px;
+  border: 1px solid #c9a84c;
+  background: rgba(201, 168, 76, 0.12);
+  color: #c9a84c;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.learn-start-btn:hover:not(:disabled) {
+  background: rgba(201, 168, 76, 0.22);
+}
+.learn-start-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.learn-reset-btn {
+  padding: 6px 12px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: var(--text-mid);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.learn-reset-btn:hover {
+  border-color: rgba(255, 80, 80, 0.5);
+  color: #ff8080;
+}
+.learn-status-msg {
+  font-size: 11px;
+  color: var(--text-mid);
+  text-align: center;
+  min-height: 14px;
+}
+.learn-status-msg.error {
+  color: #ff8080;
+}
+
+/* Card-screen footer: Back button on the left, queue badge on the right. */
+.learn-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+  width: 560px;        /* matches .table-wrap width so it looks aligned */
+  max-width: 100%;
+}
+.learn-back-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: var(--text-mid);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.learn-back-btn:hover {
+  border-color: var(--text-dim);
+  color: var(--text-dim);
+}
+.learn-queue-badge {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--text-mid);
+  text-transform: uppercase;
+}
+
+/* Reveal feedback strip — verdict + Easy + Next, shown after an answer. */
+.learn-feedback-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 560px;
+  max-width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.lfb-verdict {
+  flex: 1;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+.lfb-verdict.correct { color: #5ab070; }
+.lfb-verdict.wrong   { color: #ff8080; }
+.learn-easy-btn,
+.learn-next-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.learn-easy-btn {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: var(--text-mid);
+}
+.learn-easy-btn:hover:not(:disabled) {
+  border-color: #5ab070;
+  color: #5ab070;
+}
+.learn-next-btn {
+  border: 1px solid #c9a84c;
+  background: rgba(201, 168, 76, 0.12);
+  color: #c9a84c;
+}
+.learn-next-btn:hover:not(:disabled) {
+  background: rgba(201, 168, 76, 0.22);
+}
+.learn-easy-btn:disabled,
+.learn-next-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* End-of-session summary — sits inside the existing .learn-entry-card. */
+.learn-summary-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-mid);
+  text-align: center;
+  padding: 4px 8px;
+}
+
+/* Bottom-sheet scaffolding (Track B.4, Stage 2). These elements exist in the
+   DOM on every viewport but are inert/hidden on desktop — the grab handle is
+   display:none and the backdrop is transparent+non-interactive until a sheet
+   opens, which only happens under the mobile breakpoint below. */
+.sheet-handle { display: none; }
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  z-index: 150;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s ease;
+}
+.sheet-backdrop.show { opacity: 1; pointer-events: auto; }
+
+/* Floating "Deal" button (Track B.4, Stage 3). On mobile the real Deal Hand
+   button lives inside the settings sheet; this FAB proxies clicks to it so the
+   core action stays reachable without opening the sheet. Hidden by default —
+   mobile.js shows it only in Drill on a narrow viewport. z-index sits BELOW the
+   sheet backdrop (150) so it dims out while the sheet is open. */
+.mobile-deal-fab {
+  display: none;
+  position: fixed;
+  right: 14px;
+  bottom: 60px;
+  z-index: 120;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 22px;
+  border-radius: 9999px;
+  border: 1px solid var(--gold);
+  background: var(--gold);
+  color: #1a1209;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  box-shadow: 0 6px 20px rgba(0,0,0,.5);
+  cursor: pointer;
+}
+.mobile-deal-fab:active { filter: brightness(1.1); }
+
+/* ════════════════════════════════════════════════════════════════════
+   MOBILE ADAPTATION — Track B.4 / P-002
+   ════════════════════════════════════════════════════════════════════
+   Everything mobile-specific lives below this line, gated behind a single
+   breakpoint. Desktop rules above are never touched — this block only
+   ADDS overrides when the viewport is narrow, so the desktop layout is
+   guaranteed unchanged. Stage 1 (this block): scrollable top tabs, a
+   single-column stacked layout (table on top, panels flow below), and a
+   fluid table whose %-based seats scale automatically.
+   Stage 2 will turn the stacked panels into off-canvas drawers.
+   ──────────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+
+  /* — TOPBAR: let the 6 tabs scroll horizontally instead of overflowing.
+       Sits above the sheet backdrop (z-index 150) so tabs stay tappable while
+       a sheet is open — tapping a tab switches mode AND closes the sheet. — */
+  .topbar { padding: 0 10px; gap: 8px; position: relative; z-index: 250; }
+  .logo { display: none; }                 /* reclaim width for the tabs */
+  .mode-tabs {
+    flex: 1;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;                  /* Firefox: hide scrollbar */
+  }
+  .mode-tabs::-webkit-scrollbar { display: none; }   /* WebKit: hide */
+  .mode-tab { flex-shrink: 0; padding: 6px 12px; }
+  .session-pill { flex-shrink: 0; font-size: 11px; }
+
+  /* — LAYOUT: 3-column grid → single column. The center section (table or
+       matrix) is reordered to the top. The RIGHT panel (stats / history /
+       legend) flows below the table and the page scrolls. The LEFT panel
+       (settings) is lifted out of flow into a bottom sheet (below).
+       Bottom padding leaves room for the peeking sheet handle. — */
+  .layout { grid-template-columns: 1fr; padding-bottom: 52px; }
+  .table-section, .viz-section, .editor-section { order: -1; }
+  .panel-right {
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid var(--panel-border);
+    padding: 14px 14px;
+    gap: 14px;
+  }
+
+  /* — SETTINGS BOTTOM SHEET (Stage 2) — the left panel becomes a sheet pinned
+       to the bottom edge. By default only a 46px grab handle peeks above the
+       edge; swiping up (or tapping the handle) slides the full panel in.
+       Positions are fixed so the sheet floats over the table. JS (mobile.js)
+       toggles .sheet-open and manages the backdrop + swipe gestures. — */
+  .panel-left {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    width: auto;
+    max-height: 82vh;
+    border: none;
+    border-top: 1px solid var(--border-default, rgba(255,255,255,.12));
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -10px 34px rgba(0,0,0,.6);
+    padding: 0 14px 18px;
+    gap: 14px;
+    transform: translateY(calc(100% - 46px));
+    transition: transform .32s cubic-bezier(.16,1,.3,1);
+    z-index: 200;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .panel-left.sheet-open { transform: translateY(0); }
+
+  /* Grab handle — sticky so it stays visible while the sheet content scrolls.
+       The pill + label signal "pull me up". The whole bar is the tap target. */
+  .sheet-handle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 46px;
+    position: sticky;
+    top: 0;
+    margin: 0 -14px 4px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--panel-border);
+    cursor: pointer;
+    touch-action: none;          /* let JS own the vertical swipe on the handle */
+    user-select: none;
+    z-index: 1;
+  }
+  .sheet-handle::before {
+    content: '';
+    width: 38px; height: 4px;
+    border-radius: 2px;
+    background: var(--text-dim);
+  }
+  .sheet-handle-label {
+    font-family: var(--font-ui);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* — TABLE: fluid width, fixed 680:330 stadium ratio. Seats are positioned
+       in % (see SLOT_POS in drill.js) so they follow the box automatically.
+       Only the fixed-px seat contents need shrinking, below. — */
+  .table-section { padding: 10px 8px 14px; gap: 10px; }
+  .table-wrap {
+    width: min(94vw, 680px);
+    height: auto;
+    aspect-ratio: 680 / 330;
+  }
+  .table-felt   { inset: 10px; }
+  .table-felt::before { inset: 8px; }
+  .timer-ring   { inset: 10px; }
+
+  /* Seat contents (fixed px) scaled down to match the smaller table */
+  .seat-circle  { width: 34px; height: 34px; font-size: 10px; }
+  .seat-cards   { bottom: 22px; }
+  .mini-back    { width: 19px; height: 27px; border-radius: 4px; }
+  .seat-name    { font-size: 8px; }
+  .seat-stack   { font-size: 10px; padding: 1px 6px; }
+  .pot-block    { padding: 4px 10px; }
+  .pot-value    { font-size: 14px; }
+  .pot-label    { font-size: 8px; }
+  .action-log   { font-size: 9px; max-width: 80%; }
+
+  /* Blind / raise chips: shrink while keeping the JS-set centering transform */
+  .bet-chip            { transform: translate(-50%, -50%) scale(.82); }
+  .chip-stack, .chip-pot { transform: translate(-50%, -50%) scale(.82); }
+
+  /* Hero hole cards below the table */
+  .hero-cards   { gap: 8px; }
+  .card         { width: 48px; height: 69px; border-radius: 6px; }
+  .card-center  { font-size: 24px; }
+  .card-corner  { top: 4px; left: 5px; }
+
+  /* Action buttons: wrap instead of overflowing the narrow table area, and
+     hit the 44px touch-target minimum (Apple HIG / Material 48dp). */
+  .action-bar   { flex-wrap: wrap; justify-content: center; }
+  .action-btn   { min-height: 48px; padding: 12px 20px; }
+
+  /* Touch targets inside the settings sheet and pickers */
+  .seg          { min-height: 44px; }
+  .pos-buttons .seg { min-height: 44px; }
+  .mini-select  { min-height: 40px; }
+  .fb-next, .fb-hint, .learn-next-btn, .learn-easy-btn { min-height: 44px; }
+  .right-tab    { min-height: 40px; }
+
+  /* Feedback strip can wrap on narrow screens */
+  .feedback-strip, .learn-feedback-strip { flex-wrap: wrap; }
+
+  /* — VISUALIZER MATRIX: the desktop width uses calc(100vw - 420px) which
+       goes negative on phones and collapses the grid. Override to a simple
+       fluid width. (.cell-label already uses clamp() so labels scale.) — */
+  .matrix { width: min(94vw, 520px); }
+  .viz-section, .editor-section { padding: 10px 8px; }
+
+  .spot-line { font-size: 11px; }
 }

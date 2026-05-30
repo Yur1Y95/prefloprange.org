@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Table Design Preview — Poker Trainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Neutrals (GTOW discipline) */
+  --surface-0:#080d0a; --surface-1:#0f1512; --surface-2:#161d19; --surface-3:#1c2420;
+  --border-subtle:rgba(255,255,255,.06); --border-default:rgba(255,255,255,.10); --border-strong:rgba(255,255,255,.16);
+  /* Text */
+  --text-primary:#dceae1; --text-secondary:#9ab8a4; --text-tertiary:#5a7a65; --text-disabled:rgba(220,234,225,.32);
+  /* Accent (gold, used sparingly) */
+  --accent:#c9a84c; --accent-hi:#e8c97a; --accent-bg:rgba(201,168,76,.12);
+  /* Felt & rim (GG richness — the hero) */
+  --felt:#183d26; --felt-hi:#1e4d30; --felt-shadow:#0a1f12;
+  --rim:#2e1505; --rim-hi:#5a3210;
+  /* Shadows */
+  --shadow-sm:0 1px 3px rgba(0,0,0,.4); --shadow-md:0 4px 12px rgba(0,0,0,.5);
+  --shadow-card:0 2px 8px rgba(0,0,0,.5);
+  --shadow-table:0 0 0 2px #1a0800, 0 10px 50px rgba(0,0,0,.9), inset 0 1px 3px rgba(255,255,255,.1);
+  /* Fonts */
+  --font-ui:'Oxanium',sans-serif; --font-body:'DM Sans',sans-serif;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; min-height:100vh;
+  background:radial-gradient(ellipse at 50% 0%, #10171300 0%, var(--surface-0) 70%), var(--surface-0);
+  color:var(--text-primary); font-family:var(--font-body);
+  display:flex; flex-direction:column; align-items:center; gap:24px;
+  padding:32px 16px 64px;
+}
+
+/* ── Header / controls ───────────────────────────────── */
+.preview-head{ text-align:center; max-width:620px; }
+.preview-head h1{
+  font-family:var(--font-ui); font-weight:700; letter-spacing:2px; text-transform:uppercase;
+  font-size:18px; margin:0 0 6px; color:var(--text-primary);
+}
+.preview-head p{ margin:0; font-size:13px; color:var(--text-secondary); line-height:1.5; }
+.controls{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; }
+.seg-buttons{ display:inline-flex; border:1px solid var(--border-default); border-radius:8px; overflow:hidden; }
+.seg{
+  font-family:var(--font-ui); font-weight:600; font-size:12px; letter-spacing:1px;
+  background:transparent; color:var(--text-secondary); border:none; padding:8px 14px; cursor:pointer;
+  border-right:1px solid var(--border-subtle);
+}
+.seg:last-child{ border-right:none; }
+.seg.active{ background:var(--accent-bg); color:var(--accent-hi); }
+.hint{ font-size:12px; color:var(--text-tertiary); }
+
+/* ── Table (stadium / racetrack — elongated, ~2:1) ───── */
+.table-wrap{ position:relative; width:680px; height:330px; flex-shrink:0; }
+.table-rim{
+  position:absolute; inset:0; border-radius:9999px;
+  background:radial-gradient(ellipse at 40% 28%, var(--rim-hi), var(--rim) 60%, #1a0800);
+  box-shadow:var(--shadow-table);
+}
+.table-felt{
+  position:absolute; inset:16px; border-radius:9999px;
+  background:radial-gradient(ellipse at 45% 35%, var(--felt-hi), var(--felt) 52%, var(--felt-shadow));
+  box-shadow:inset 0 0 80px rgba(0,0,0,.55);
+  overflow:hidden; display:flex; align-items:center; justify-content:center;
+}
+.table-felt::before{
+  content:''; position:absolute; inset:0; border-radius:9999px;
+  background:
+    repeating-linear-gradient(0deg,  transparent, transparent 36px, rgba(255,255,255,.015) 36px, rgba(255,255,255,.015) 37px),
+    repeating-linear-gradient(90deg, transparent, transparent 36px, rgba(255,255,255,.015) 36px, rgba(255,255,255,.015) 37px);
+}
+
+/* Center pot */
+.pot-block{
+  position:relative; z-index:3; display:flex; flex-direction:column; align-items:center; gap:2px;
+  background:rgba(0,0,0,.28); border-radius:8px; padding:6px 14px;
+}
+.pot-label{ font-family:var(--font-ui); font-size:9px; letter-spacing:2px; color:var(--text-tertiary); }
+.pot-value{ font-family:var(--font-ui); font-size:18px; font-weight:700; color:var(--accent-hi); }
+
+/* ── Seats ───────────────────────────────────────────── */
+.seats{ position:absolute; inset:0; pointer-events:none; }
+.seat{
+  position:absolute; transform:translate(-50%,-50%);
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  pointer-events:auto; cursor:pointer; z-index:6;
+  transition:opacity .25s ease, filter .25s ease;
+}
+/* Folded: cards gone (handled in markup) + whole seat dims */
+.seat.is-folded{ opacity:.34; filter:grayscale(.6); }
+
+/* Mini card-backs above the token = "this player still holds cards" */
+.seat-cards{ display:flex; gap:-6px; height:30px; align-items:flex-end; }
+.seat.is-folded .seat-cards{ visibility:hidden; }
+.mini-back{
+  width:21px; height:29px; border-radius:4px;
+  background:
+    repeating-linear-gradient(45deg, rgba(0,0,0,.18) 0 3px, rgba(255,255,255,.05) 3px 6px),
+    linear-gradient(135deg, #1d3a6e 0%, #0a1428 100%);
+  border:1px solid rgba(120,160,220,.35);
+  box-shadow:var(--shadow-card);
+  position:relative;
+}
+.mini-back::after{
+  content:''; position:absolute; inset:3px; border-radius:2px;
+  border:1px solid rgba(150,185,235,.30);
+}
+.mini-back.b1{ transform:rotate(-9deg) translateX(4px); }
+.mini-back.b2{ transform:rotate(9deg) translateX(-4px); margin-left:-7px; }
+
+/* Position token (no avatar — just the seat marker) */
+.seat-circle{
+  width:46px; height:46px; border-radius:50%;
+  background:#0e1a12; border:2px solid #2a3a2a;
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-ui); font-size:11px; font-weight:700; letter-spacing:.5px;
+  color:#4a6a54; box-shadow:0 2px 8px rgba(0,0,0,.5); position:relative;
+}
+.seat-circle.is-hero{
+  border-color:var(--accent); color:var(--accent);
+  box-shadow:0 0 18px rgba(201,168,76,.25), 0 2px 8px rgba(0,0,0,.5);
+}
+.seat-circle.is-dealer::after{
+  content:'D'; position:absolute; top:-5px; right:-5px;
+  width:17px; height:17px; background:var(--accent); color:#111;
+  border-radius:50%; font-size:9px; font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+}
+.seat-name{
+  font-family:var(--font-ui); font-size:9px; font-weight:600; letter-spacing:1.5px;
+  text-transform:uppercase; color:var(--text-tertiary);
+}
+.seat-name.is-hero{ color:var(--accent); }
+.seat-stack{ font-family:var(--font-ui); font-size:9.5px; font-weight:500; color:#6f9079; }
+
+/* Hero's real (face-up) cards */
+.hero-hand{ display:flex; gap:3px; height:42px; align-items:flex-end; }
+.play-card{
+  width:30px; height:42px; border-radius:5px;
+  background:linear-gradient(160deg,#ffffff 0%,#e9eef2 100%);
+  box-shadow:var(--shadow-card);
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-ui); font-weight:800; font-size:11px; line-height:1;
+  flex-direction:column; gap:1px; position:relative;
+}
+.play-card .pc-rank{ font-size:13px; }
+.play-card.red{ color:#c0392b; }
+.play-card.black{ color:#1a1a1a; }
+.play-card.c1{ transform:rotate(-6deg); }
+.play-card.c2{ transform:rotate(6deg); margin-left:-4px; }
+
+/* Blind chips */
+.bet-chip{
+  position:absolute; transform:translate(-50%,-50%);
+  width:24px; height:24px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-ui); font-size:8px; font-weight:800; z-index:7;
+  box-shadow:0 2px 6px rgba(0,0,0,.6);
+}
+.chip-sb{ background:#666; border:2px solid #999; color:#fff; }
+.chip-bb{ background:#8b6914; border:2px solid var(--accent); color:var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="preview-head">
+  <h1>Стол — превью дизайна</h1>
+  <p>Hero всегда внизу по центру, 5 оппонентов зеркально вокруг. У активных игроков — две рубашки над фишкой места; у Hero — реальные карты. <b>Клик по месту</b> переключает fold (рубашки исчезают, место тускнеет).</p>
+</div>
+
+<div class="controls">
+  <div class="seg-buttons" id="sizeSel">
+    <button class="seg active" data-n="6">6-max</button>
+    <button class="seg" data-n="8">8-max</button>
+    <button class="seg" data-n="9">9-max</button>
+  </div>
+  <span class="hint">8/9-max — черновые координаты, для проверки масштабируемости</span>
+</div>
+
+<div class="table-wrap" id="tableWrap">
+  <div class="table-rim"></div>
+  <div class="table-felt">
+    <div class="pot-block">
+      <div class="pot-label">POT</div>
+      <div class="pot-value" id="potValue">1.5 BB</div>
+    </div>
+  </div>
+  <div class="seats" id="seats"></div>
+</div>
+
+<script>
+// ── Symmetric seat geometry (slot 0 = hero, bottom center) ──
+// top/left are % of the table-wrap box. Mirrored left↔right around 50%.
+// Tuned for the elongated stadium shape: side seats pushed outward toward
+// the rounded ends, top/bottom seats sit on the straight long edges.
+const SLOT_POS = {
+  6: [
+    {top:91,left:50}, {top:80,left:83}, {top:20,left:83},
+    {top:8, left:50}, {top:20,left:17}, {top:80,left:17},
+  ],
+  8: [
+    {top:91,left:50}, {top:82,left:80}, {top:50,left:95}, {top:14,left:80},
+    {top:8, left:50}, {top:14,left:20}, {top:50,left:5},  {top:82,left:20},
+  ],
+  9: [
+    {top:92,left:50}, {top:86,left:82}, {top:55,left:94}, {top:20,left:84}, {top:9,left:60},
+    {top:9, left:40}, {top:20,left:16}, {top:55,left:6},  {top:86,left:18},
+  ],
+};
+
+// Position labels per table size (heads order doesn't matter for the visual)
+const POSITIONS = {
+  6: ['UTG','MP','CO','BTN','SB','BB'],
+  8: ['UTG','UTG+1','MP','HJ','CO','BTN','SB','BB'],
+  9: ['UTG','UTG+1','UTG+2','MP','HJ','CO','BTN','SB','BB'],
+};
+
+const HERO_HAND = [{rank:'A',suit:'♠',red:false},{rank:'K',suit:'♦',red:true}];
+
+// Mock state: which positions have folded. Default: a couple folded to show dimming.
+let state = { n:6, hero:'CO', folded:new Set(['UTG','MP']) };
+
+function render(){
+  const wrap = document.getElementById('seats');
+  wrap.innerHTML = '';
+  // clear old blind chips
+  document.querySelectorAll('.bet-chip').forEach(c=>c.remove());
+
+  const n = state.n;
+  const positions = POSITIONS[n];
+  const slots = SLOT_POS[n];
+  const heroIdx = positions.indexOf(state.hero);
+
+  positions.forEach((pos)=>{
+    const isHero   = pos === state.hero;
+    const isDealer = pos === 'BTN';
+    const folded   = !isHero && state.folded.has(pos);
+    const posIdx   = positions.indexOf(pos);
+    const slot     = (heroIdx - posIdx + n) % n;
+    const sp       = slots[slot] || {top:50,left:50};
+
+    const seat = document.createElement('div');
+    seat.className = 'seat' + (folded ? ' is-folded' : '');
+    seat.style.top  = sp.top + '%';
+    seat.style.left = sp.left + '%';
+    seat.dataset.pos = pos;
+
+    // cards row: hero = real face-up hand; opponents = two mini backs
+    let cardsHtml;
+    if (isHero){
+      cardsHtml = '<div class="hero-hand">' + HERO_HAND.map((c,i)=>
+        `<div class="play-card ${c.red?'red':'black'} c${i+1}"><span class="pc-rank">${c.rank}</span><span>${c.suit}</span></div>`
+      ).join('') + '</div>';
+    } else {
+      cardsHtml = '<div class="seat-cards"><div class="mini-back b1"></div><div class="mini-back b2"></div></div>';
+    }
+
+    seat.innerHTML =
+      cardsHtml +
+      `<div class="seat-circle${isHero?' is-hero':''}${isDealer?' is-dealer':''}">${pos.replace('UTG+','U+')}</div>` +
+      `<div class="seat-name${isHero?' is-hero':''}">${isHero?'Hero':pos}</div>` +
+      `<div class="seat-stack">100 BB</div>`;
+
+    // click toggles fold (hero can't fold in this preview)
+    if (!isHero){
+      seat.addEventListener('click', ()=>{
+        if (state.folded.has(pos)) state.folded.delete(pos);
+        else state.folded.add(pos);
+        render();
+      });
+    }
+    wrap.appendChild(seat);
+  });
+
+  // Blind chips (SB / BB) toward table center, only if those positions are active
+  addBlindChip('SB','0.5','chip-sb');
+  addBlindChip('BB','1','chip-bb');
+}
+
+function addBlindChip(pos, text, cls){
+  const n = state.n;
+  const positions = POSITIONS[n];
+  if (!positions.includes(pos) || state.folded.has(pos)) return;
+  const slots = SLOT_POS[n];
+  const heroIdx = positions.indexOf(state.hero);
+  const slot = (heroIdx - positions.indexOf(pos) + n) % n;
+  const sp = slots[slot]; if(!sp) return;
+  // nudge chip from the seat toward the table center (50/50)
+  const top  = sp.top  + (50 - sp.top)  * 0.22;
+  const left = sp.left + (50 - sp.left) * 0.22;
+  const chip = document.createElement('div');
+  chip.className = 'bet-chip ' + cls;
+  chip.textContent = text;
+  chip.style.top  = top + '%';
+  chip.style.left = left + '%';
+  document.getElementById('tableWrap').appendChild(chip);
+}
+
+// size selector
+document.getElementById('sizeSel').addEventListener('click', (e)=>{
+  const btn = e.target.closest('.seg'); if(!btn) return;
+  document.querySelectorAll('#sizeSel .seg').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const n = +btn.dataset.n;
+  state.n = n;
+  // pick a hero position roughly in the middle of the order, reset folds
+  state.hero = POSITIONS[n][Math.floor(n/2)];
+  state.folded = new Set();
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

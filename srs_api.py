@@ -122,6 +122,11 @@ class AnswerRequest(BaseModel):
     marked_easy: bool = False
 
 
+class UpgradeEasyRequest(BaseModel):
+    file: str
+    card_id: str
+
+
 def _card_for_ui(card: srs.Card, *, reveal_strategy: bool) -> dict:
     """
     Serialize a card for the frontend.
@@ -266,3 +271,29 @@ def srs_reset(file: str = Query(...)):
     if os.path.exists(state_path):
         os.remove(state_path)
     return {"status": "reset", "file": file}
+
+
+@router.post("/upgrade_easy")
+def srs_upgrade_easy(req: UpgradeEasyRequest):
+    """
+    Upgrade a card's most-recent GOOD answer to EASY.
+
+    Called from the Learn reveal screen when the user clicks the Easy button
+    after a correct (in-strategy) answer. We apply the GOOD→EASY delta:
+    interval × 1.3 (at least +1 day), ease + 0.15. The card has already been
+    persisted with the GOOD result by ``/answer`` — this endpoint mutates and
+    re-saves it. See ``srs.upgrade_good_to_easy`` for the math and trade-offs.
+    """
+    cards = _load_deck(req.file)
+    if not cards:
+        raise HTTPException(status_code=404, detail="Deck not initialized.")
+    card = _find_card(cards, req.card_id)
+    srs.upgrade_good_to_easy(card, today=date.today())
+    _save_deck(req.file, cards)
+    return {
+        "ok":            True,
+        "card_id":       card.card_id,
+        "interval_days": card.interval_days,
+        "ease_factor":   card.ease_factor,
+        "next_review":   card.next_review,
+    }

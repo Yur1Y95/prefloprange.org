@@ -17,14 +17,17 @@ from drill_engine import (
 )
 from postflop_api import router as postflop_router
 from equity_api import router as equity_router
+from srs_api import router as srs_router
 
 app = FastAPI(title="NLH Range Trainer")
 app.include_router(postflop_router)
 app.include_router(equity_router)
+app.include_router(srs_router)
 
 BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR     = os.path.join(BASE_DIR, "data")
 STATIC_DIR   = os.path.join(BASE_DIR, "static")
+CARDS_DIR    = os.path.join(BASE_DIR, "cards")
 STATS_FILE   = os.path.join(BASE_DIR, "stats.json")
 HISTORY_FILE = os.path.join(BASE_DIR, "history.json")
 HISTORY_MAX  = 200
@@ -122,6 +125,39 @@ class AnswerRequest(BaseModel):
     is_timeout: bool = False
 
 
+class SaveRangeRequest(BaseModel):
+    filename: str            # "cash_6max_100bb" or "cash_6max_100bb.json"
+    data:     dict           # full payload: {meta, config, spots}
+
+
+def _safe_data_filename(filename: str) -> str:
+    """
+    Resolve ``filename`` to a sanitized basename inside ``DATA_DIR``.
+
+    Rejects path-traversal (``..``), separators (``/``, ``\\``), absolute
+    paths, hidden files (leading ``.``), and exotic characters. Ensures the
+    ``.json`` suffix. Returns just the basename — callers join with ``DATA_DIR``.
+    """
+    fn = filename.strip()
+    if not fn:
+        raise HTTPException(400, detail="filename is required")
+    # Strip a single trailing .json for the pattern check, re-add at the end.
+    bare = fn[:-5] if fn.endswith(".json") else fn
+    # Allow letters, digits, underscore, dash. No dots, slashes, spaces.
+    if not _SAFE_NAME_RE.match(bare):
+        raise HTTPException(
+            400,
+            detail=f"Invalid filename: {filename!r}. "
+                   f"Allowed: letters, digits, underscore, dash. No paths.",
+        )
+    return bare + ".json"
+
+
+# Module-level regex so we compile it once.
+import re as _re
+_SAFE_NAME_RE = _re.compile(r"^[A-Za-z0-9_\-]+$")
+
+
 @app.get("/api/ranges/list")
 def list_ranges():
     return _list_range_files()
@@ -130,6 +166,39 @@ def list_ranges():
 @app.get("/api/ranges")
 def get_ranges(file: str = Query("")):
     return _load_range(file)
+
+
+@app.post("/api/ranges/save")
+def save_range(req: SaveRangeRequest):
+    """
+    Persist a range file to ``data/<filename>.json``. Overwrites existing
+    files silently — this is a single-user authoring tool, no version control
+    in the loop. Editor is the configurator of your own JSON; that's the
+    intended workflow.
+
+    Filename is sanitized (no traversal, no exotic chars). Data must be a
+    dict — anything else is a 400. We don't deep-validate the shape here;
+    the editor is expected to produce a well-formed ``{meta, config, spots}``
+    payload, and downstream consumers (range_engine, srs.init_cards_from_spots)
+    handle their own validation.
+    """
+    if not isinstance(req.data, dict):
+        raise HTTPException(400, detail="data must be a JSON object")
+
+    fn   = _safe_data_filename(req.filename)
+    path = os.path.join(DATA_DIR, fn)
+
+    # Make sure DATA_DIR exists in case the user blew it away — saving a
+    # range should always succeed regardless of current dir state.
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(req.data, f, indent=2, ensure_ascii=False)
+    except OSError as e:
+        raise HTTPException(500, detail=f"Failed to write {fn}: {e}")
+
+    return {"status": "saved", "filename": fn}
 
 
 @app.get("/api/config")
@@ -268,7 +337,17 @@ def random_villain_select(config, spot, hero_position):
 
 # serve frontend
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static_files")
+# Recolored 4-color SVG card assets (see docs/roadmap.md B.1-cards)
+if os.path.isdir(CARDS_DIR):
+    app.mount("/cards", StaticFiles(directory=CARDS_DIR), name="card_assets")
 
 @app.get("/")
 async def serve_index():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+
+# Lets `python3 main.py` start the dev server, matching CLAUDE.md.
+# Pass the app as an import string so --reload-style auto-reload works.
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
