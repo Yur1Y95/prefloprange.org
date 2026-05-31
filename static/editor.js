@@ -32,6 +32,10 @@ const ed = {
   loadedFrom: null,   // full key: "user:name" or "server:name.json"
   loadedName: null,   // bare name used for save/display
 
+  // P-015: true once the range has unsaved edits. Gates the overwrite-save
+  // button only (save-as-new stays always available). Reset on save/load.
+  dirty: false,
+
   // Spot config
   spot:       'RFI',
   heroPos:    'UTG',
@@ -237,10 +241,12 @@ function bindQsPopup() {
 
   popup.querySelectorAll('.qs-btn').forEach(btn => {
     btn.addEventListener('click', e => {
+      // Keep stopPropagation so the click does not bubble to the document
+      // listener below (which would close the popup). We intentionally do NOT
+      // hide the popup here (P-012): the user applies several hand groups in a
+      // row, closing only via the trigger toggle or a click outside.
       e.stopPropagation();
       edApplyQuickSelect(btn.dataset.qs);
-      popup.style.display = 'none';
-      trigger.classList.remove('open');
     });
   });
 
@@ -349,23 +355,32 @@ function edBindEvents() {
     });
   });
 
-  // Frequency slider
+  // Frequency: three input sources (slider, number field, presets) kept in
+  // sync through edSetFreq/edSyncFreqUI. ed.freq is the single source of truth.
   const slider = document.getElementById('freqSlider');
+  const freqInput = document.getElementById('freqVal');
+
   slider.addEventListener('input', () => {
-    ed.freq = parseInt(slider.value);
-    document.getElementById('freqVal').textContent = ed.freq + '%';
-    document.querySelectorAll('.qf-btn').forEach(b => b.classList.remove('active'));
+    // skipSlider: don't rewrite the slider's own value mid-drag.
+    edSetFreq(slider.value, { skipSlider: true });
+  });
+
+  // Number field: clamp live but don't rewrite while typing (skipInput keeps
+  // the caret); normalize the displayed value on blur. Enter commits via blur.
+  freqInput.addEventListener('input', () => {
+    edSetFreq(freqInput.value, { skipInput: true });
+  });
+  freqInput.addEventListener('blur', () => {
+    edSetFreq(freqInput.value);
+  });
+  freqInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') freqInput.blur();
   });
 
   // Quick freq buttons
   document.querySelectorAll('.qf-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      ed.freq = parseInt(btn.dataset.freq);
-      slider.value = ed.freq;
-      document.getElementById('freqVal').textContent = ed.freq + '%';
-      document.querySelectorAll('.qf-btn').forEach(b =>
-        b.classList.toggle('active', parseInt(b.dataset.freq) === ed.freq)
-      );
+      edSetFreq(btn.dataset.freq);
     });
   });
 
@@ -376,6 +391,7 @@ function edBindEvents() {
   document.getElementById('eClearAllBtn').addEventListener('click', () => {
     const range = edRangeKey();
     Object.keys(range).forEach(k => delete range[k]);
+    edMarkDirty();   // P-015
     edUpdateMatrix();
   });
 
@@ -395,6 +411,28 @@ function edPaintFromEvent(e) {
   const cell = e.target.closest('.matrix-cell');
   if (!cell) return;
   edPaintHand(cell.dataset.hand);
+}
+
+// ── FREQUENCY (slider ↔ number field ↔ presets) ───────
+// ed.freq (0–100 int) is the single source of truth. edSetFreq clamps the raw
+// value and reflects it everywhere; opts.skipSlider/skipInput leave the
+// originating control untouched (no mid-drag rewrite, no caret jump).
+function edSyncFreqUI(opts = {}) {
+  const slider = document.getElementById('freqSlider');
+  const input  = document.getElementById('freqVal');
+  if (slider && !opts.skipSlider) slider.value = ed.freq;
+  if (input  && !opts.skipInput)  input.value  = ed.freq;
+  document.querySelectorAll('.qf-btn').forEach(b =>
+    b.classList.toggle('active', parseInt(b.dataset.freq, 10) === ed.freq)
+  );
+}
+
+function edSetFreq(raw, opts = {}) {
+  let v = parseInt(raw, 10);
+  if (isNaN(v)) v = 0;
+  v = Math.max(0, Math.min(100, v));
+  ed.freq = v;
+  edSyncFreqUI(opts);
 }
 
 // ── POSITION CONTROLS ─────────────────────────────────
@@ -472,6 +510,7 @@ function edBuildMatrix() {
 
 // ── PAINT A HAND ─────────────────────────────────────
 function edPaintHand(hand) {
+  edMarkDirty();   // P-015: any paint/clear of a hand is an unsaved edit
   const range = edRangeKey();
   const freq  = ed.freq / 100;
 
@@ -666,6 +705,9 @@ async function _edDoSave(rawName, btn, defaultLabel) {
     btn.style.borderColor = '#27ae60';
     btn.style.color       = '#2ecc71';
 
+    // Range on disk now matches the editor → no longer dirty (P-015).
+    edSetClean();
+
     if (typeof drillRefreshFileList === 'function') drillRefreshFileList();
     if (typeof vizRefreshAfterSave  === 'function') vizRefreshAfterSave();
     edPopulateLoadDropdown();
@@ -676,6 +718,7 @@ async function _edDoSave(rawName, btn, defaultLabel) {
       btn.style.borderColor = '';
       btn.style.color       = '';
       btn.disabled          = false;
+      edUpdateDirtyUI();   // re-gate overwrite button (stays disabled — clean)
     }, 2000);
   } else {
     console.error('[editor.js] save failed:', errMsg);
@@ -687,10 +730,38 @@ async function _edDoSave(rawName, btn, defaultLabel) {
       btn.style.borderColor = '';
       btn.style.color       = '';
       btn.disabled          = false;
+      edUpdateDirtyUI();   // save failed → still dirty → overwrite re-enabled
     }, 3500);
   }
 
   return ok;
+}
+
+// ── DIRTY STATE (P-015) ───────────────────────────────
+// edMarkDirty() is called from every range-mutation point (paint, quick-select,
+// clear-all). edSetClean() runs after a successful save and after loading a file
+// from disk (the range now matches what's persisted). edUpdateDirtyUI() reflects
+// the flag onto the overwrite-save button — disabled while clean so the user
+// can't re-save identical data. Only the overwrite button is gated; "save as
+// new range" stays enabled (saving a copy under a new name is meaningful even
+// without edits).
+function edMarkDirty() {
+  if (ed.dirty) return;
+  ed.dirty = true;
+  edUpdateDirtyUI();
+}
+
+function edSetClean() {
+  ed.dirty = false;
+  edUpdateDirtyUI();
+}
+
+function edUpdateDirtyUI() {
+  const overBtn = document.getElementById('eSaveCurrentBtn');
+  if (!overBtn) return;
+  // Don't fight the transient "Saving…"/"✓ Saved!" state: _edDoSave manages
+  // disabled during the request and calls edUpdateDirtyUI() after its timeout.
+  overBtn.disabled = !ed.dirty;
 }
 
 // ── UPDATE SAVE UI ────────────────────────────────────
@@ -720,6 +791,7 @@ function edUpdateSaveUI() {
     saveBtn.classList.remove('save-btn-secondary');
     edUpdateFilename();   // restore auto-generated placeholder
   }
+  edUpdateDirtyUI();   // gate the overwrite button to current dirty state
 }
 
 // ── SAVE (overwrite loaded file) ──────────────────────
@@ -891,10 +963,13 @@ function edApplyLoadedData(data, sourceKey) {
     ed.loadedName     = null;
   }
 
+  // Freshly loaded range matches what's on disk → not dirty (P-015).
+  edSetClean();
+
   edRenderControls();
   edBuildMatrix();
   edUpdateMatrix();
-  edUpdateSaveUI();   // switch save section to overwrite mode
+  edUpdateSaveUI();   // switch save section to overwrite mode (also re-gates dirty)
 }
 
 // ── BOOT ─────────────────────────────────────────────

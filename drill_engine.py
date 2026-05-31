@@ -4,7 +4,7 @@ Handles: RFI, vs_RFI, vs_3bet spots with full preflop action context.
 """
 
 import random
-from range_engine import get_rfi_range, get_vs_rfi_range, get_vs_3bet_range
+from range_engine import get_rfi_range, get_vs_rfi_range, get_vs_3bet_range, get_ev
 
 RANKS = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"]
 SUITS = ["s", "h", "d", "c"]
@@ -115,8 +115,11 @@ def get_position_specific_data(hero_position):
 # ---------- drill hand generators ----------
 
 def get_drill_hand_rfi(range_data, hero_position):
-    """Return a drill question for an RFI spot."""
+    """Return a drill question for an RFI spot, or None if there's no data
+    for this position (P-011 — caller surfaces a clean 404, not a 500)."""
     rfi_range = get_rfi_range(range_data, hero_position)
+    if not rfi_range:
+        return None
 
     hand = random.choice(all_hands())
     value = rfi_range.get(hand, 0)
@@ -138,6 +141,10 @@ def get_drill_hand_rfi(range_data, hero_position):
         actions = {"open": frequency} if frequency > 0 else {}
 
     card1, card2 = generate_cards(hand)
+
+    # Precomputed GTO EV of opening this hand (bb), or None if the file has no
+    # `ev` data for it. Carried through to check_answer for the feedback line.
+    gto_ev = get_ev(range_data, "RFI", hero_position, hand)
 
     # Build preflop context
     positions = list(range_data["config"]["positions"])
@@ -170,6 +177,7 @@ def get_drill_hand_rfi(range_data, hero_position):
         "rng": rng,
         "correct_action": correct_action,
         "available_actions": available_actions,
+        "gto_ev": gto_ev,
         "context": {
             "stacks": stacks,
             "pot": pot,
@@ -182,10 +190,9 @@ def get_drill_hand_rfi(range_data, hero_position):
 
 
 def get_drill_hand_vs_rfi(range_data, hero_position, villain_position):
-    """Return a drill question for a vs_RFI spot."""
-    try:
-        expanded_range = get_vs_rfi_range(range_data, hero_position, villain_position)
-    except KeyError:
+    """Return a drill question for a vs_RFI spot, or None if no data (P-011)."""
+    expanded_range = get_vs_rfi_range(range_data, hero_position, villain_position)
+    if not expanded_range:
         return None
 
     hand = random.choice(all_hands())
@@ -240,10 +247,9 @@ def get_drill_hand_vs_rfi(range_data, hero_position, villain_position):
 
 
 def get_drill_hand_vs_3bet(range_data, hero_position, villain_position):
-    """Return a drill question for a vs_3bet spot."""
-    try:
-        expanded_range = get_vs_3bet_range(range_data, hero_position, villain_position)
-    except KeyError:
+    """Return a drill question for a vs_3bet spot, or None if no data (P-011)."""
+    expanded_range = get_vs_3bet_range(range_data, hero_position, villain_position)
+    if not expanded_range:
         return None
 
     hand = random.choice(all_hands())
@@ -331,27 +337,23 @@ def check_answer(drill_hand, player_action, is_timeout=False):
     correct = player_action == correct_action
 
     if spot == "RFI":
-        frequency = drill_hand.get("frequency", 0)
-        freq_pct = int(frequency * 100)
+        # GTO EV display rules (locked with user):
+        #   correct open  → show real GTO EV (None when the file has no data)
+        #   correct fold  → no EV (folding is always 0 EV — nothing to show)
+        #   any wrong     → no EV (we only store EV of the profitable action)
+        # ev=None means the frontend hides the EV pill entirely.
+        gto_ev = drill_hand.get("gto_ev")  # float bb, or None when no EV data
 
         if correct:
-            if frequency == 0:
-                ev = EV_CORRECT_FOLD
+            if correct_action == "open":
+                ev = gto_ev
+                message = "Correct — open."
+            else:
+                ev = None
                 message = "Correct — fold."
-            elif frequency >= 1.0:
-                ev = EV_CORRECT_OPEN
-                message = "Correct — always open."
-            else:
-                ev = round(EV_CORRECT_OPEN * frequency, 2)
-                action_word = "open" if correct_action == "open" else "fold"
-                message = f"Correct — {action_word} ({freq_pct}% open)."
         else:
-            if player_action == "fold":
-                ev = round(EV_WRONG_FOLD * frequency, 2)
-                message = f"Wrong — should open {freq_pct}% of the time."
-            else:
-                ev = EV_WRONG_PLAY
-                message = "Wrong — this hand is not in range, fold."
+            ev = None
+            message = f"Wrong — correct action: {correct_action}."
 
     elif spot in ("vs_RFI", "vs_3bet"):
         actions = drill_hand.get("actions", {})
@@ -374,7 +376,7 @@ def check_answer(drill_hand, player_action, is_timeout=False):
         "correct": correct,
         "player_action": player_action,
         "correct_action": correct_action,
-        "ev": round(ev, 2),
+        "ev": round(ev, 2) if ev is not None else None,
         "message": message,
         "is_timeout": False,
     }

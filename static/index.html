@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260530b">
+  <link rel="stylesheet" href="/static/style.css?v=20260530h">
 </head>
 <body>
 
@@ -110,8 +110,7 @@
           <button class="paint-btn" data-action="3bet">3-Bet</button>
           <button class="paint-btn" data-action="call">Call</button>
           <button class="paint-btn" data-action="4bet">4-Bet</button>
-          <button class="paint-btn" data-action="fold">Fold</button>
-          <button class="paint-btn" data-action="clear">✕ Clear</button>
+          <button class="paint-btn" data-action="clear" title="Clear hand" aria-label="Clear hand">🗑</button>
         </div>
       </div>
 
@@ -150,7 +149,7 @@
         <label class="control-label">Frequency</label>
         <div class="freq-row">
           <input type="range" class="freq-slider" id="freqSlider" min="0" max="100" value="100">
-          <span class="freq-val" id="freqVal">100%</span>
+          <span class="freq-num"><input type="number" class="freq-val" id="freqVal" min="0" max="100" step="1" value="100"><span class="freq-pct">%</span></span>
         </div>
         <div class="quick-freqs">
           <button class="qf-btn active" data-freq="100">100</button>
@@ -356,6 +355,7 @@
             <span class="pot-label">POT</span>
             <span class="pot-value" id="potValue">1.5 BB</span>
           </div>
+          <div class="drill-empty" id="drillEmpty" style="display:none"></div>
         </div>
         <div class="seats" id="seats"></div>
         <svg class="timer-ring" id="timerRing" viewBox="0 0 648 298" preserveAspectRatio="none" style="display:none">
@@ -638,10 +638,10 @@
        file so the browser fetches the new version instead of a stale copy. -->
   <script src="/static/cards.js?v=20260529a"></script>
   <script src="/static/chips.js?v=20260530c"></script>
-  <script src="/static/drill.js?v=20260530c"></script>
+  <script src="/static/drill.js?v=20260530g"></script>
   <script src="/static/postflop.js?v=20260530c"></script>
   <script src="/static/visualizer.js?v=20260530a"></script>
-  <script src="/static/editor.js?v=20260530a"></script>
+  <script src="/static/editor.js?v=20260530d"></script>
   <script src="/static/learn.js?v=20260526f"></script>
   <script src="/static/mobile.js?v=20260529b"></script>
 </body>

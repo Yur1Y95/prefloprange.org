@@ -157,8 +157,11 @@ body {
   text-align: center;
   transition: .15s;
 }
-.pos-btn:hover { background: rgba(255,255,255,.05); color: var(--text); }
+.pos-btn:hover:not(:disabled) { background: rgba(255,255,255,.05); color: var(--text); }
 .pos-btn.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+/* P-011: spot/position with no data in the loaded pack — greyed, unclickable. */
+.pos-btn:disabled, .seg:disabled { opacity: .3; cursor: default; }
+.seg:disabled:hover { background: transparent; }
 
 /* Mode row */
 .mode-row { display: flex; align-items: center; justify-content: space-between; margin-top: 2px; }
@@ -331,6 +334,36 @@ body {
 }
 .pot-label { font-family: var(--font-ui); font-size: 9px; letter-spacing: 2px; color: var(--text-dim); }
 .pot-value { font-family: var(--font-ui); font-size: 18px; font-weight: 700; color: var(--gold-hi); }
+
+/* P-011 empty-state banner — centred in the felt when a spot has no data. */
+.drill-empty {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: 70%;
+  text-align: center;
+  background: rgba(0,0,0,.42);
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 10px;
+  padding: 14px 20px;
+}
+.drill-empty .de-title {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--gold-hi);
+}
+.drill-empty .de-hint {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-mid);
+}
 
 /* Timer ring SVG */
 .timer-ring {
@@ -920,6 +953,9 @@ body {
   cursor: default;
   transition: filter .1s, transform .1s;
   background: #1e2a22;
+  /* P-013: no native text selection of hand labels during drag-paint. */
+  -webkit-user-select: none;
+  user-select: none;
   /* Clip background to padding-box so the `to right` frequency gradient does
      not bleed a 1px green sliver under the semi-transparent border at the
      right edge (Chromium gradient+border edge artifact = the "green tail").
@@ -1070,14 +1106,14 @@ body {
 .paint-btn.active { border-width: 2px; filter: brightness(1.2); }
 
 .paint-btn[data-action="open"]  { color: #7effa8; }
-.paint-btn[data-action="fold"]  { color: #aaa; }
 .paint-btn[data-action="3bet"]  { color: #ffb3c0; }
 .paint-btn[data-action="call"]  { color: #7ec8ff; }
 .paint-btn[data-action="4bet"]  { color: #e0b3ff; }
-.paint-btn[data-action="clear"] { color: #e67e22; grid-column: span 2; }
+/* P-014: Clear is the trash button — full-width below the 2×2 action grid.
+   Larger font for the 🗑 glyph; no letter-spacing (irrelevant for an emoji). */
+.paint-btn[data-action="clear"] { color: #e67e22; grid-column: span 2; font-size: 16px; letter-spacing: 0; }
 
 .paint-btn.active[data-action="open"]  { background: rgba(14,60,26,.6);  border-color: #7effa8; }
-.paint-btn.active[data-action="fold"]  { background: rgba(42,42,42,.6);  border-color: #aaa; }
 .paint-btn.active[data-action="3bet"]  { background: rgba(122,26,46,.6); border-color: #ffb3c0; }
 .paint-btn.active[data-action="call"]  { background: rgba(26,74,122,.6); border-color: #7ec8ff; }
 .paint-btn.active[data-action="4bet"]  { background: rgba(106,13,173,.4);border-color: #e0b3ff; }
@@ -1105,14 +1141,40 @@ body {
   background: var(--gold);
   cursor: pointer;
 }
+.freq-num {
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+}
+.freq-pct {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+}
+/* P-017: editable frequency field — looks like the old static value but
+   accepts keyboard input. Spinners hidden; clamp/sync handled in editor.js. */
 .freq-val {
   font-family: var(--font-ui);
   font-size: 14px;
   font-weight: 700;
   color: var(--gold);
-  min-width: 36px;
+  width: 30px;
   text-align: right;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 0;
+  outline: none;
+  -moz-appearance: textfield;
 }
+.freq-val::-webkit-outer-spin-button,
+.freq-val::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.freq-val:hover { border-bottom-color: var(--panel-border); }
+.freq-val:focus { border-bottom-color: var(--gold); }
 
 /* Quick freq buttons */
 .quick-freqs {
@@ -1166,6 +1228,7 @@ body {
 }
 .save-btn:hover { background: rgba(201,168,76,.28); }
 .save-btn:disabled { opacity: .45; cursor: default; }
+.save-btn:disabled:hover { background: var(--gold-dim); }   /* P-015: stay muted when clean */
 
 /* Secondary save-as-new button — muted gold outline */
 .save-btn-secondary {

@@ -157,7 +157,7 @@
 - *Primary* — золотая обводка + `--accent-bg` фон + `--accent` текст. Один primary на экран (Next, Учить, Save). Сейчас: `.learn-start-btn`, `.learn-next-btn`, `.deal-btn`.
 - *Secondary / ghost* — прозрачный фон, `--border-default`, `--text-secondary`. Reset, Back, Export.
 - *Danger* — `--wrong` обводка на hover. Reset Progress.
-- *Action* (спот-действия) — фон из `--c-<action>`, текст из `--c-<action>-fg`. Fold/Open/Call/3bet/4bet.
+- *Action* (спот-действия) — фон из `--c-<action>`, текст из `--c-<action>-fg`. Open/Call/3bet/4bet. **Fold-кнопки нет** (решение P-014, 2026-05-30): рука без действия = implicit fold (полный и частичный), явная кнопка редундантна. В редакторе панель Action = сетка 2×2 (Open/3-Bet/Call/4-Bet) + широкая кнопка-корзина 🗑 (Clear) снизу. Цвет fold (`#1e2a22`) остаётся только для отрисовки незалитого остатка в ячейках матрицы.
 - Размеры: sm (`--sp-2 --sp-3`, `--fs-sm`), md (`--sp-3 --sp-4`, `--fs-base`).
 
 **Игральные карты** (герой, GG-богатство). Анатомия: белое лицо, `--radius-md`, `--shadow-card`, ранг в углу + крупная масть в центре. **4-цветная масть** (решение проекта): червы `#ae0d03`, бубны `#2235c5`, трефы `#33ae2b`, пики `#504f4f`. Ассеты — CC0 SVG-колода `saulspatz/SVGCards` (vertical, jumbo-index), перекрашена и лежит в `cards/` (см. roadmap B.1-cards). Цель Track B: добавить лёгкий градиент на лицо, глянец, аккуратную рубашку для card-back. Сейчас (CSS-карты hero): `.card`, `.card-front`, `.card-back`, `.card-corner`, `.card-center` — их предстоит заменить на SVG-ассеты.

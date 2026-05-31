@@ -245,7 +245,10 @@ def get_drill_hand(
     if spot == "RFI":
         if hero_position not in config["rfi_positions"]:
             raise HTTPException(status_code=400, detail=f"{hero_position} has no RFI range.")
-        return get_drill_hand_rfi(range_data, hero_position)
+        result = get_drill_hand_rfi(range_data, hero_position)
+        if not result:
+            raise HTTPException(status_code=404, detail=f"No RFI data for {hero_position} in this pack.")
+        return result
 
     if spot == "vs_RFI":
         if not villain_position:

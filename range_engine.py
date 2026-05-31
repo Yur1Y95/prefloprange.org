@@ -256,21 +256,76 @@ def calculate_action_stats(expanded_range, action):
     }
 
 
+# P-011: soft lookups — a position/villain that exists in `config` but has no
+# data in `spots` returns an empty range ({}) instead of raising KeyError. The
+# caller (drill_engine) treats {} as "no data" and surfaces a clean 404.
 def get_rfi_range(data, position):
-    raw_range = data["spots"]["RFI"][position]
+    raw_range = data.get("spots", {}).get("RFI", {}).get(position)
+    if not raw_range:
+        return {}
     return expand_rfi_range(raw_range)
 
 
 def get_vs_rfi_range(data, hero_position, villain_position):
     key = f"vs_{villain_position}"
-    raw_range = data["spots"]["vs_RFI"][hero_position][key]
+    raw_range = data.get("spots", {}).get("vs_RFI", {}).get(hero_position, {}).get(key)
+    if not raw_range:
+        return {}
     return expand_action_range(raw_range)
 
 
 def get_vs_3bet_range(data, hero_position, villain_position):
     key = f"vs_{villain_position}"
-    raw_range = data["spots"]["vs_3bet"][hero_position][key]
+    raw_range = data.get("spots", {}).get("vs_3bet", {}).get(hero_position, {}).get(key)
+    if not raw_range:
+        return {}
     return expand_action_range(raw_range)
+
+
+def get_ev(data, spot, position, hand, villain_position=None):
+    """
+    Look up the precomputed GTO EV (in bb) of the profitable action for a hand.
+
+    EV lives in an OPTIONAL top-level `ev` block kept separate from `spots`, so
+    strategy iteration (combos, mixed-action resolution, the hint matrix) never
+    sees it. Layout mirrors `spots`:
+
+        "ev": {
+          "RFI":    { "UTG": { "AA": 2.31, "AKs": 1.85, ... } },
+          "vs_RFI": { "SB":  { "vs_UTG": { "AKs": 1.2, ... } } }
+        }
+
+    Returns the EV as float, or None when the file has no `ev` block, no entry
+    for this spot/position, or no number for this hand. None means "show no EV"
+    — the trainer falls back to plain correct/wrong feedback.
+    """
+    ev_block = data.get("ev")
+    if not isinstance(ev_block, dict):
+        return None
+
+    spot_block = ev_block.get(spot)
+    if not isinstance(spot_block, dict):
+        return None
+
+    pos_block = spot_block.get(position)
+    if not isinstance(pos_block, dict):
+        return None
+
+    if spot == "RFI":
+        value = pos_block.get(hand)
+    else:
+        if not villain_position:
+            return None
+        key = f"vs_{villain_position}"
+        sub = pos_block.get(key)
+        value = sub.get(hand) if isinstance(sub, dict) else None
+
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def build_action_view(expanded_range, action):

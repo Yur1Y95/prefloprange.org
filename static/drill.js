@@ -352,25 +352,84 @@ function bindEvents() {
   });
 }
 
+// ── DATA AVAILABILITY (P-011 stage 3) ─────────────────
+// The selector must not offer spots/positions the loaded pack has no data for.
+// All checks read state.rangeData.spots (the actual ranges), not config.
+function _drillSpots() { return state.rangeData?.spots || {}; }
+
+function _nonEmpty(r) { return !!r && typeof r === 'object' && Object.keys(r).length > 0; }
+
+function rfiPosHasData(pos) { return _nonEmpty(_drillSpots().RFI?.[pos]); }
+
+function vsHeroHasData(spot, pos) {
+  const block = _drillSpots()[spot]?.[pos];
+  if (!block || typeof block !== 'object') return false;
+  return Object.values(block).some(_nonEmpty);
+}
+
+function vsVillainHasData(spot, heroPos, villainPos) {
+  return _nonEmpty(_drillSpots()[spot]?.[heroPos]?.[`vs_${villainPos}`]);
+}
+
+function spotHasAnyData(spot) {
+  if (spot === 'RFI') return Object.values(_drillSpots().RFI || {}).some(_nonEmpty);
+  return Object.values(_drillSpots()[spot] || {}).some(
+    hero => hero && typeof hero === 'object' && Object.values(hero).some(_nonEmpty));
+}
+
+function heroPosAvailable(spot, pos) {
+  return spot === 'RFI' ? rfiPosHasData(pos) : vsHeroHasData(spot, pos);
+}
+
+// Grey out spot buttons whose spot has no data in the current pack. If the
+// currently-active spot has no data, switch to the first spot that does (every
+// caller of renderHeroButtons re-renders the villain section right after, so
+// the switched spot propagates cleanly).
+function refreshSpotAvailability() {
+  document.querySelectorAll('.seg[data-spot]').forEach(btn => {
+    btn.disabled = !spotHasAnyData(btn.dataset.spot);
+  });
+  if (!spotHasAnyData(state.spot)) {
+    const firstOk = ['RFI', 'vs_RFI', 'vs_3bet'].find(spotHasAnyData);
+    if (firstOk && firstOk !== state.spot) {
+      state.spot = firstOk;
+      document.querySelectorAll('.seg[data-spot]').forEach(b =>
+        b.classList.toggle('active', b.dataset.spot === firstOk));
+    }
+  }
+}
+
 // ── POSITION BUTTONS ─────────────────────────────────
 function renderHeroButtons() {
+  refreshSpotAvailability();
   const wrap = document.getElementById('heroBtns');
   wrap.innerHTML = '';
   const positions = state.spot === 'RFI'
     ? state.config.rfi_positions
     : state.config.positions;
 
+  // If the current hero has no data for this spot, jump to the first that does
+  // so "Deal" lands on a playable spot instead of the empty-state.
+  if (!heroPosAvailable(state.spot, state.heroPos)) {
+    const firstOk = positions.find(p => heroPosAvailable(state.spot, p));
+    if (firstOk) state.heroPos = firstOk;
+  }
+
   positions.forEach(pos => {
+    const available = heroPosAvailable(state.spot, pos);
     const btn = document.createElement('button');
     btn.className = 'pos-btn' + (pos === state.heroPos ? ' active' : '');
     btn.textContent = pos;
-    btn.addEventListener('click', () => {
-      state.heroPos = pos;
-      renderHeroButtons();
-      renderVillainSection();
-      renderSeats();
-      newHand();
-    });
+    btn.disabled = !available;
+    if (available) {
+      btn.addEventListener('click', () => {
+        state.heroPos = pos;
+        renderHeroButtons();
+        renderVillainSection();
+        renderSeats();
+        newHand();
+      });
+    }
     wrap.appendChild(btn);
   });
 }
@@ -389,22 +448,28 @@ function renderVillainSection() {
     : (state.config.vs_3bet_options || {});
   const available = optMap[state.heroPos] || [];
 
-  if (!available.includes(state.villainPos)) {
-    state.villainPos = available[0] || null;
+  // Prefer a villain that actually has data; fall back to config order.
+  const withData = available.filter(p => vsVillainHasData(state.spot, state.heroPos, p));
+  if (!state.villainPos || !withData.includes(state.villainPos)) {
+    state.villainPos = withData[0] || available[0] || null;
   }
 
   const wrap = document.getElementById('villainBtns');
   wrap.innerHTML = '';
   available.forEach(pos => {
+    const hasData = vsVillainHasData(state.spot, state.heroPos, pos);
     const btn = document.createElement('button');
     btn.className = 'pos-btn' + (pos === state.villainPos ? ' active' : '');
     btn.textContent = pos;
-    btn.addEventListener('click', () => {
-      state.villainPos = pos;
-      renderVillainSection();
-      renderSeats();
-      newHand();
-    });
+    btn.disabled = !hasData;
+    if (hasData) {
+      btn.addEventListener('click', () => {
+        state.villainPos = pos;
+        renderVillainSection();
+        renderSeats();
+        newHand();
+      });
+    }
     wrap.appendChild(btn);
   });
 }
@@ -428,6 +493,32 @@ function renderSeats(context) {
   });
 }
 
+// P-019 — which seats have mucked their cards, by spot (realistic model).
+// `positions` is in action order (UTG → … → BB). Returns a Set of folded pos.
+//   RFI:     players who already acted (before hero) folded; hero + seats after
+//            hero (incl. blinds, still to act) stay live.
+//   vs_RFI:  the raiser (villain, before hero) is live; other before-hero seats
+//            folded; seats after hero are still to act → live.
+//   vs_3bet: hero opened, villain 3-bet, folded back to hero → everyone except
+//            hero and the 3-bettor (villain) has folded.
+function foldedSetForSpot(positions, heroPos, spot, villainPos) {
+  const folded = new Set();
+  const heroIdx = positions.indexOf(heroPos);
+  if (heroIdx < 0) return folded;
+
+  if (spot === 'vs_3bet') {
+    positions.forEach(p => {
+      if (p !== heroPos && p !== villainPos) folded.add(p);
+    });
+  } else {
+    // RFI and vs_RFI: only seats acting before hero can have folded so far.
+    positions.forEach((p, i) => {
+      if (i < heroIdx && p !== villainPos) folded.add(p);
+    });
+  }
+  return folded;
+}
+
 function renderSeatsInto(spec) {
   const wrap = document.getElementById(spec.seatsId);
   if (!wrap) return;
@@ -437,9 +528,12 @@ function renderSeatsInto(spec) {
   const heroIdx = positions.indexOf(spec.heroPos);
   const slotArr = SLOT_POS[n] || SLOT_POS[6];
 
-  // Optional set of folded positions. When absent, every opponent is active
-  // (shows card-backs). Engine-driven fold state is a later step.
-  const folded = spec.folded instanceof Set ? spec.folded : null;
+  // Folded positions (P-019). A caller may override via spec.folded; otherwise
+  // we derive it from the spot so both Drill and Learn (which calls this same
+  // function) muck the right seats. Realistic model — see foldedSetForSpot.
+  const folded = spec.folded instanceof Set
+    ? spec.folded
+    : foldedSetForSpot(positions, spec.heroPos, spec.spot, spec.villainPos);
 
   positions.forEach(pos => {
     const isHero    = pos === spec.heroPos;
@@ -597,6 +691,42 @@ function setActionButtonsDisabled(disabled) {
   document.querySelectorAll('.action-btn').forEach(b => b.disabled = disabled);
 }
 
+// ── EMPTY STATE (P-011) ───────────────────────────────
+// Shown when the loaded pack has no data for the chosen spot/position. Clears
+// the table (cards, chips, pot, log, action buttons) so no stale hand lingers
+// (also fixes P-010 — old blind chips no longer "freeze" on screen).
+function showDrillEmpty(detail) {
+  state.waiting  = false;
+  state.drillHand = null;
+
+  document.querySelectorAll('.chip-stack, .chip-pot').forEach(c => c.remove());
+  renderSeats();                 // keep the table visible, no chips
+  renderCards(null, null);       // hero cards back to face-down
+  renderActionButtons([]);       // remove OPEN/FOLD etc.
+  document.getElementById('actionLog').textContent = '';
+
+  const potBlock = document.querySelector('.pot-block');
+  if (potBlock) potBlock.style.display = 'none';
+
+  const v = state.spot !== 'RFI' && state.villainPos ? ` vs ${state.villainPos}` : '';
+  const spotLabel = `${state.spot} · ${state.heroPos}${v}`;
+  const empty = document.getElementById('drillEmpty');
+  if (empty) {
+    empty.innerHTML =
+      `<div class="de-title">No data for ${spotLabel}</div>` +
+      `<div class="de-hint">${detail || 'This pack has no range here.'} ` +
+      `Pick another spot/position, or fill this range in the Editor.</div>`;
+    empty.style.display = 'flex';
+  }
+}
+
+function hideDrillEmpty() {
+  const empty = document.getElementById('drillEmpty');
+  if (empty) empty.style.display = 'none';
+  const potBlock = document.querySelector('.pot-block');
+  if (potBlock) potBlock.style.display = '';
+}
+
 // ── DEAL HAND ─────────────────────────────────────────
 async function newHand() {
   stopTimer();
@@ -618,7 +748,14 @@ async function newHand() {
 
   try {
     const res = await fetch(url);
-    if (!res.ok) { console.warn('No range for this spot'); return; }
+    if (!res.ok) {
+      // P-011: empty/absent spot. Don't leave the previous hand on the table —
+      // clear it and show an explicit empty-state instead of a silent return.
+      const detail = (await res.json().catch(() => ({}))).detail || '';
+      showDrillEmpty(detail);
+      return;
+    }
+    hideDrillEmpty();
     state.drillHand = await res.json();
 
     // Sync positions if random was used
@@ -690,10 +827,20 @@ function showFeedback(result) {
   document.getElementById('fbIcon').textContent = result.correct ? '✓' : '✗';
   document.getElementById('fbMsg').textContent  = result.message;
 
-  const ev  = result.ev ?? 0;
+  // EV is shown only when the engine sends a real number (correct open with
+  // GTO data). null → fold, wrong answer, or a range with no EV → hide the pill
+  // entirely (no "+0 BB"). The pill is self-labeled "EV" so the strip message
+  // can stay plain ("Correct — open.").
   const evEl = document.getElementById('fbEv');
-  evEl.textContent  = (ev >= 0 ? '+' : '') + ev + ' BB';
-  evEl.className    = 'fb-ev ' + (ev >= 0 ? 'pos' : 'neg');
+  if (result.ev == null) {
+    evEl.style.display = 'none';
+    evEl.textContent   = '';
+  } else {
+    const ev = result.ev;
+    evEl.style.display = '';
+    evEl.textContent   = 'EV ' + (ev >= 0 ? '+' : '') + ev + ' BB';
+    evEl.className     = 'fb-ev ' + (ev >= 0 ? 'pos' : 'neg');
+  }
 
   document.getElementById('fbHint').style.display = result.correct ? 'none' : 'inline-block';
 
@@ -1081,8 +1228,10 @@ function renderHistory(entries) {
     const isMatch   = e.correct;
     const isTimeout = e.is_timeout;
     const cls       = isTimeout ? 'h-timeout' : isMatch ? 'h-correct' : 'h-wrong';
-    const evSign    = e.ev >= 0 ? '+' : '';
-    const evCls     = e.ev >= 0 ? 'pos' : 'neg';
+    // EV may be null (correct fold / wrong / range without EV) → omit the pill.
+    const evHtml    = (e.ev == null)
+      ? ''
+      : `<span class="h-ev ${e.ev >= 0 ? 'pos' : 'neg'}">${e.ev >= 0 ? '+' : ''}${e.ev} BB</span>`;
     const spot      = e.villain_position
       ? `${e.spot} · ${e.hero_position} vs ${e.villain_position}`
       : `${e.spot} · ${e.hero_position}`;
@@ -1100,7 +1249,7 @@ function renderHistory(entries) {
       <div class="history-entry ${cls}">
         <div class="h-top">
           <span class="h-hand">${e.card1} ${e.card2}</span>
-          <span class="h-ev ${evCls}">${evSign}${e.ev} BB</span>
+          ${evHtml}
         </div>
         <div class="h-detail">${spot} · ${e.ts}</div>
         <div class="h-actions">${playerBadge}${timeoutBadge}</div>
