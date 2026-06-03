@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<!--
+  back_preview.html — iteration harness for the opponent card back (cards/goldBack.svg).
+
+  Why this exists: lets us tweak the SVG and see it instantly at REAL sizes on the
+  REAL felt, using the REAL .mini-back / .card-back classes from style.css — no need
+  to boot the whole Drill, and no Figma round-trip. See docs/roadmap.md B.1-cards.
+
+  Usage:  python3 main.py  →  http://localhost:8000/static/back_preview.html
+  Edit cards/goldBack.svg (or run `python3 cards/goldBack.gen.py`), hit "Reload asset"
+  (or just refresh). The asset is cache-busted by timestamp so changes show at once.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Card Back — preview</title>
+  <!-- the real stylesheet, so .mini-back / .card-back / .seat-cards render 1:1 -->
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    body {
+      margin: 0;
+      background: #080d0a;
+      color: #dceae1;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      padding: 24px;
+    }
+    h1 { font-size: 16px; font-weight: 700; letter-spacing: .3px; margin: 0 0 4px; }
+    .sub { color: #5a7a65; font-size: 12px; margin: 0 0 20px; }
+    .toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 22px; flex-wrap: wrap; }
+    .toolbar button, .toolbar label {
+      font: inherit; font-size: 13px;
+      background: rgba(201,168,76,.15); color: #c9a84c;
+      border: 1px solid #c9a84c; border-radius: 8px;
+      padding: 7px 14px; cursor: pointer; user-select: none;
+    }
+    .toolbar label { background: transparent; color: #9ab8a4; border-color: #2a3a2a; }
+    .toolbar .stamp { color: #5a7a65; border: none; background: none; cursor: default; }
+
+    section { margin-bottom: 30px; }
+    .label { font-size: 12px; color: #9ab8a4; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .6px; }
+
+    /* Felt stage — the approved table render, with seats + a board row on top */
+    .felt {
+      position: relative;
+      width: 760px; max-width: 100%;
+      aspect-ratio: 1500 / 860;
+      background: #0b3a21 center/cover no-repeat;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .felt.has-img { background-image: url('/static/table_art/table.png'); }
+
+    /* a seat mock: relative box so .seat-cards positions like in-app */
+    .seat { position: absolute; width: 80px; height: 70px; }
+    .seat .seat-circle { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); }
+    .s1 { left: 14%;  top: 18%; }
+    .s2 { left: 50%;  top: 8%;  transform: translateX(-50%); }
+    .s3 { left: 72%;  top: 18%; }
+
+    /* board row of face-down 64x92 cards, centred on the felt */
+    .board {
+      position: absolute; left: 50%; top: 52%;
+      transform: translate(-50%, -50%);
+      display: flex; gap: 8px;
+    }
+
+    /* Readability ladder on a flat dark panel */
+    .ladder { display: flex; align-items: flex-end; gap: 26px; }
+    .rung { text-align: center; }
+    .rung .cap { font-size: 11px; color: #5a7a65; margin-top: 8px; }
+    .swatch {
+      /* same background recipe as .mini-back / .card-back; size set per rung */
+      background: #060606 url('/cards/goldBack.svg') center/100% 100% no-repeat;
+      border-radius: 5px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.6);
+      margin: 0 auto;
+    }
+    .sz-mobile { width: 19px; height: 27px; border-radius: 3px; }
+    .sz-seat   { width: 28px; height: 39px; }
+    .sz-board  { width: 64px; height: 92px; border-radius: 8px; }
+    .sz-xl     { width: 128px; height: 184px; border-radius: 12px; }
+    .sz-xxl    { width: 256px; height: 368px; border-radius: 18px; }
+  </style>
+</head>
+<body>
+  <h1>Opponent card back — live preview</h1>
+  <p class="sub">cards/goldBack.svg · rendered with the real .mini-back / .card-back classes from style.css</p>
+
+  <div class="toolbar">
+    <button id="reload">↻ Reload asset</button>
+    <label><input type="checkbox" id="feltToggle" checked> felt background</label>
+    <span class="stamp" id="stamp"></span>
+  </div>
+
+  <section>
+    <p class="label">On the felt — seats (28×39 fan) + board (64×92)</p>
+    <div class="felt has-img" id="felt">
+      <div class="seat s1"><div class="seat-cards"><div class="mini-back b1"></div><div class="mini-back b2"></div></div><div class="seat-circle">CO</div></div>
+      <div class="seat s2"><div class="seat-cards"><div class="mini-back b1"></div><div class="mini-back b2"></div></div><div class="seat-circle">UTG</div></div>
+      <div class="seat s3"><div class="seat-cards"><div class="mini-back b1"></div><div class="mini-back b2"></div></div><div class="seat-circle">BTN</div></div>
+      <div class="board">
+        <div class="card card-back"></div>
+        <div class="card card-back"></div>
+        <div class="card card-back"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Readability ladder — real sizes → magnified</p>
+    <div class="ladder">
+      <div class="rung"><div class="swatch sz-mobile"></div><div class="cap">19px · mobile seat</div></div>
+      <div class="rung"><div class="swatch sz-seat"></div><div class="cap">28px · seat</div></div>
+      <div class="rung"><div class="swatch sz-board"></div><div class="cap">64px · board / hero</div></div>
+      <div class="rung"><div class="swatch sz-xl"></div><div class="cap">128px</div></div>
+      <div class="rung"><div class="swatch sz-xxl"></div><div class="cap">256px · detail</div></div>
+    </div>
+  </section>
+
+  <script>
+    // Cache-bust the SVG by timestamp so edits show immediately. We override the
+    // background shorthand inline on every element that paints the back, keeping
+    // size/position/colour identical to the stylesheet recipe.
+    function bust() {
+      const u = '/cards/goldBack.svg?t=' + Date.now();
+      document.querySelectorAll('.mini-back, .card-back').forEach(el => {
+        el.style.background = "#060606 url('" + u + "') center/100% 100% no-repeat";
+      });
+      document.querySelectorAll('.swatch').forEach(el => {
+        el.style.backgroundImage = "url('" + u + "')";
+      });
+      document.getElementById('stamp').textContent = 'asset loaded @ ' + new Date().toLocaleTimeString();
+    }
+    document.getElementById('reload').addEventListener('click', bust);
+    document.getElementById('feltToggle').addEventListener('change', e => {
+      document.getElementById('felt').classList.toggle('has-img', e.target.checked);
+    });
+    bust();
+  </script>
+</body>
+</html>

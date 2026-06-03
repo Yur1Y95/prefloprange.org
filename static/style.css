@@ -408,18 +408,10 @@ body {
 .mini-back {
   width: 28px; height: 39px;
   border-radius: 5px;
-  background:
-    repeating-linear-gradient(45deg, rgba(0,0,0,.18) 0 3px, rgba(255,255,255,.05) 3px 6px),
-    linear-gradient(135deg, #1d3a6e 0%, #0a1428 100%);
-  border: 1px solid rgba(120,160,220,.38);
+  /* Ornate black+gold back — one SVG asset shared with .card-back (cards/goldBack.svg) */
+  background: #060606 url(/cards/goldBack.svg) center/100% 100% no-repeat;
   box-shadow: 0 2px 8px rgba(0,0,0,.55);
   position: relative;
-}
-.mini-back::after {
-  content: '';
-  position: absolute; inset: 3px;
-  border-radius: 3px;
-  border: 1px solid rgba(150,185,235,.30);
 }
 .mini-back.b1 { transform: rotate(-8deg) translateX(5px); }
 .mini-back.b2 { transform: rotate(8deg) translateX(-5px); margin-left: -9px; }
@@ -595,16 +587,9 @@ body {
   transition: transform .2s;
 }
 .card-back {
-  background: linear-gradient(135deg, #152240 0%, #0a1428 100%);
-  border: 1px solid #2a3a5a;
-}
-.card-back::after {
-  content: '';
-  position: absolute;
-  inset: 5px;
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 4px;
-  background: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,.03) 4px, rgba(255,255,255,.03) 5px);
+  /* Ornate black+gold back — shared SVG asset (cards/goldBack.svg) */
+  background: #060606 url(/cards/goldBack.svg) center/100% 100% no-repeat;
+  border: none;
 }
 .card-front {
   background: #fff;

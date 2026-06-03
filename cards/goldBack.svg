@@ -1,0 +1,42 @@
+<svg viewBox="0 0 64 92" xmlns="http://www.w3.org/2000/svg">
+  <title>Poker Trainer — card back</title>
+  <defs>
+    <radialGradient id="bgGold" cx="50%" cy="46%" r="62%">
+      <stop offset="0" stop-color="#1c1308"/>
+      <stop offset="0.55" stop-color="#0f0b06"/>
+      <stop offset="1" stop-color="#060606"/>
+    </radialGradient>
+    <linearGradient id="spadeGold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8c97a"/>
+      <stop offset="1" stop-color="#c9a84c"/>
+    </linearGradient>
+    <clipPath id="panelClip">
+      <rect x="5.0" y="5.0" width="54.0" height="82.0" rx="4"/>
+    </clipPath>
+  </defs>
+
+  <!-- base -->
+  <rect x="0" y="0" width="64" height="92" rx="8" fill="url(#bgGold)"/>
+
+  <!-- guilloche lattice, clipped to the inner panel -->
+  <g clip-path="url(#panelClip)" stroke="#c9a84c" stroke-width="0.35" fill="none" opacity="0.14">
+    <path d="M 5.00 82.50 L 9.50 87.00 M 5.00 78.00 L 14.00 87.00 M 5.00 73.50 L 18.50 87.00 M 5.00 69.00 L 23.00 87.00 M 5.00 64.50 L 27.50 87.00 M 5.00 60.00 L 32.00 87.00 M 5.00 55.50 L 36.50 87.00 M 5.00 51.00 L 41.00 87.00 M 5.00 46.50 L 45.50 87.00 M 5.00 42.00 L 50.00 87.00 M 5.00 37.50 L 54.50 87.00 M 5.00 33.00 L 59.00 87.00 M 5.00 28.50 L 59.00 82.50 M 5.00 24.00 L 59.00 78.00 M 5.00 19.50 L 59.00 73.50 M 5.00 15.00 L 59.00 69.00 M 5.00 10.50 L 59.00 64.50 M 5.00 6.00 L 59.00 60.00 M 8.50 5.00 L 59.00 55.50 M 13.00 5.00 L 59.00 51.00 M 17.50 5.00 L 59.00 46.50 M 22.00 5.00 L 59.00 42.00 M 26.50 5.00 L 59.00 37.50 M 31.00 5.00 L 59.00 33.00 M 35.50 5.00 L 59.00 28.50 M 40.00 5.00 L 59.00 24.00 M 44.50 5.00 L 59.00 19.50 M 49.00 5.00 L 59.00 15.00 M 53.50 5.00 L 59.00 10.50 M 58.00 5.00 L 59.00 6.00"/>
+    <path d="M 9.50 5.00 L 5.00 9.50 M 14.00 5.00 L 5.00 14.00 M 18.50 5.00 L 5.00 18.50 M 23.00 5.00 L 5.00 23.00 M 27.50 5.00 L 5.00 27.50 M 32.00 5.00 L 5.00 32.00 M 36.50 5.00 L 5.00 36.50 M 41.00 5.00 L 5.00 41.00 M 45.50 5.00 L 5.00 45.50 M 50.00 5.00 L 5.00 50.00 M 54.50 5.00 L 5.00 54.50 M 59.00 5.00 L 5.00 59.00 M 59.00 9.50 L 5.00 63.50 M 59.00 14.00 L 5.00 68.00 M 59.00 18.50 L 5.00 72.50 M 59.00 23.00 L 5.00 77.00 M 59.00 27.50 L 5.00 81.50 M 59.00 32.00 L 5.00 86.00 M 59.00 36.50 L 8.50 87.00 M 59.00 41.00 L 13.00 87.00 M 59.00 45.50 L 17.50 87.00 M 59.00 50.00 L 22.00 87.00 M 59.00 54.50 L 26.50 87.00 M 59.00 59.00 L 31.00 87.00 M 59.00 63.50 L 35.50 87.00 M 59.00 68.00 L 40.00 87.00 M 59.00 72.50 L 44.50 87.00 M 59.00 77.00 L 49.00 87.00 M 59.00 81.50 L 53.50 87.00 M 59.00 86.00 L 58.00 87.00"/>
+  </g>
+
+  <!-- frame -->
+  <rect x="2.5" y="2.5" width="59" height="87" rx="6" fill="none" stroke="#c9a84c" stroke-width="0.9"/>
+  <rect x="5" y="5" width="54" height="82" rx="4" fill="none" stroke="#e8c97a" stroke-width="0.4" opacity="0.55"/>
+
+  <!-- corner fleurons -->
+  <path d="M 9.00 14.00 L 9.00 9.00 L 14.00 9.00 M 55.00 14.00 L 55.00 9.00 L 50.00 9.00 M 9.00 78.00 L 9.00 83.00 L 14.00 83.00 M 55.00 78.00 L 55.00 83.00 L 50.00 83.00" fill="none" stroke="#c9a84c" stroke-width="0.6" stroke-linecap="round" opacity="0.85"/>
+
+  <!-- central medallion -->
+  <g>
+    <polygon points="32,26 47,46 32,66 17,46" fill="#0a0805" fill-opacity="0.55" stroke="#c9a84c" stroke-width="0.9"/>
+    <polygon points="32,29.5 44,46 32,62.5 20,46" fill="none" stroke="#e8c97a" stroke-width="0.4" opacity="0.6"/>
+    <g transform="translate(32 46) scale(0.62) translate(-50 -50.6)">
+      <path d="M 50 36 C 57.6 42.7 63.2 50 60.6 57 C 59.1 60.8 54.7 62 52 59 L 53.2 65.2 L 46.8 65.2 L 48 59 C 45.3 62 40.9 60.8 39.4 57 C 36.8 50 42.4 42.7 50 36 Z" fill="url(#spadeGold)"/>
+    </g>
+  </g>
+</svg>
