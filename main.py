@@ -13,6 +13,8 @@ from drill_engine import (
     get_drill_hand_rfi,
     get_drill_hand_vs_rfi,
     get_drill_hand_vs_3bet,
+    get_drill_hand_vs_4bet,
+    get_drill_hand_iso,
     check_answer,
 )
 from postflop_api import router as postflop_router
@@ -86,11 +88,18 @@ def _load_range(file: str = "") -> dict:
     return _normalize_range_data(load_range_file(path))
 
 
+_SPOT_DEFAULTS = {"RFI": {}, "vs_RFI": {}, "vs_3bet": {}, "vs_4bet": {}, "iso": {}}
+
+
 def load_stats() -> dict:
     if os.path.exists(STATS_FILE):
         with open(STATS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"RFI": {}, "vs_RFI": {}, "vs_3bet": {}}
+            data = json.load(f)
+        # Ensure new spots are present without touching existing data
+        for spot in _SPOT_DEFAULTS:
+            data.setdefault(spot, {})
+        return data
+    return dict(_SPOT_DEFAULTS)
 
 
 def save_stats(stats: dict):
@@ -266,6 +275,22 @@ def get_drill_hand(
             raise HTTPException(status_code=404, detail=f"Range not found: {hero_position} vs {villain_position}.")
         return result
 
+    if spot == "vs_4bet":
+        if not villain_position:
+            raise HTTPException(status_code=400, detail="villain_position required.")
+        result = get_drill_hand_vs_4bet(range_data, hero_position, villain_position)
+        if not result:
+            raise HTTPException(status_code=404, detail=f"No vs_4bet data: {hero_position} vs {villain_position}.")
+        return result
+
+    if spot == "iso":
+        if not villain_position:
+            raise HTTPException(status_code=400, detail="villain_position required.")
+        result = get_drill_hand_iso(range_data, hero_position, villain_position)
+        if not result:
+            raise HTTPException(status_code=404, detail=f"No iso data: {hero_position} vs {villain_position}.")
+        return result
+
     raise HTTPException(status_code=400, detail=f"Unknown spot: {spot}")
 
 
@@ -304,7 +329,7 @@ def get_stats():
 
 @app.post("/api/stats/reset")
 def reset_stats():
-    save_stats({"RFI": {}, "vs_RFI": {}, "vs_3bet": {}})
+    save_stats(dict(_SPOT_DEFAULTS))
     return {"status": "reset"}
 
 
@@ -319,22 +344,31 @@ def clear_history():
     return {"status": "cleared"}
 
 
+_SPOT_OPTIONS_KEY = {
+    "vs_RFI":   "vs_rfi_options",
+    "vs_3bet":  "vs_3bet_options",
+    "vs_4bet":  "vs_4bet_options",
+    "iso":      "iso_options",
+}
+
+
 def random_hero_select(config, spot):
     rfi_positions = config["rfi_positions"]
     if spot == "RFI":
         return _random.choice(rfi_positions) if rfi_positions else None
-    options = config["vs_rfi_options"] if spot == "vs_RFI" else config.get("vs_3bet_options", {})
-    valid = [h for h in rfi_positions if options.get(h)]
+    opts_key = _SPOT_OPTIONS_KEY.get(spot)
+    if not opts_key:
+        return None
+    options = config.get(opts_key, {})
+    valid = [h for h in options if options.get(h)]
     return _random.choice(valid) if valid else None
 
 
 def random_villain_select(config, spot, hero_position):
-    if spot == "vs_RFI":
-        villains = config["vs_rfi_options"].get(hero_position, [])
-    elif spot == "vs_3bet":
-        villains = config.get("vs_3bet_options", {}).get(hero_position, [])
-    else:
+    opts_key = _SPOT_OPTIONS_KEY.get(spot)
+    if not opts_key:
         return None
+    villains = config.get(opts_key, {}).get(hero_position, [])
     return _random.choice(villains) if villains else None
 
 

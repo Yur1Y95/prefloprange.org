@@ -282,6 +282,53 @@ def get_vs_3bet_range(data, hero_position, villain_position):
     return expand_action_range(raw_range)
 
 
+def get_vs_4bet_range(data, hero_position, villain_position):
+    """Hero is the 3-bettor answering a 4-bet from the original opener (villain).
+    Actions: call / allin (5-bet) / implicit fold."""
+    key = f"vs_{villain_position}"
+    raw_range = data.get("spots", {}).get("vs_4bet", {}).get(hero_position, {}).get(key)
+    if not raw_range:
+        return {}
+    return expand_action_range(raw_range)
+
+
+def get_iso_range(data, hero_position, villain_position):
+    """Hero iso-raises or over-limps against a limper (villain).
+    Actions: raise (iso) / call (over-limp) / implicit fold."""
+    key = f"vs_{villain_position}"
+    raw_range = data.get("spots", {}).get("iso", {}).get(hero_position, {}).get(key)
+    if not raw_range:
+        return {}
+    return expand_action_range(raw_range)
+
+
+def get_squeeze_range(data, hero_position, caller_key):
+    """Hero faces an opener + cold caller(s) and may squeeze / flat / fold.
+
+    `caller_key` is the seating-order pair "<opener>-<caller>" (opener first),
+    the same string stored as the sub-key under spots.squeeze[hero]. Unlike the
+    vs_* spots it is NOT prefixed with "vs_" — a squeeze villain is two seats,
+    not one. Actions: squeeze / call / implicit fold."""
+    raw_range = data.get("spots", {}).get("squeeze", {}).get(hero_position, {}).get(caller_key)
+    if not raw_range:
+        return {}
+    return expand_action_range(raw_range)
+
+
+def get_vs_squeeze_range(data, hero_position, lineup_key):
+    """Hero OPENED, was cold-called, then got squeezed, and now answers it.
+
+    The mirror image of get_squeeze_range. `lineup_key` is the seating-order
+    string "<opener>-<squeezer>-<caller(s)>" (opener first, squeezer next), the
+    same sub-key stored under spots.vs_squeeze[hero]. Like squeeze it is NOT
+    prefixed with "vs_" — the villain is a multi-seat lineup, not one position.
+    v1 stores only hero == opener nodes. Actions: 4bet / call / implicit fold."""
+    raw_range = data.get("spots", {}).get("vs_squeeze", {}).get(hero_position, {}).get(lineup_key)
+    if not raw_range:
+        return {}
+    return expand_action_range(raw_range)
+
+
 def get_ev(data, spot, position, hand, villain_position=None):
     """
     Look up the precomputed GTO EV (in bb) of the profitable action for a hand.
@@ -292,8 +339,14 @@ def get_ev(data, spot, position, hand, villain_position=None):
 
         "ev": {
           "RFI":    { "UTG": { "AA": 2.31, "AKs": 1.85, ... } },
-          "vs_RFI": { "SB":  { "vs_UTG": { "AKs": 1.2, ... } } }
+          "vs_RFI": { "SB":  { "vs_UTG": { "AKs": 1.2, ... } } },
+          "squeeze":{ "BB":  { "BTN-SB": { "AKs": 1.83, ... } } },
+          "vs_squeeze": { "UTG": { "UTG-BB-HJ-CO": { "AKs": 2.1, ... } } }
         }
+
+    For squeeze / vs_squeeze, pass the bare lineup key as `villain_position`
+    (no "vs_" prefix): "<opener>-<caller>" for squeeze,
+    "<opener>-<squeezer>-<caller(s)>" for vs_squeeze.
 
     Returns the EV as float, or None when the file has no `ev` block, no entry
     for this spot/position, or no number for this hand. None means "show no EV"
@@ -313,6 +366,14 @@ def get_ev(data, spot, position, hand, villain_position=None):
 
     if spot == "RFI":
         value = pos_block.get(hand)
+    elif spot in ("squeeze", "vs_squeeze"):
+        # villain_position carries the bare lineup key (no "vs_" prefix):
+        # "<opener>-<caller>" for squeeze, "<opener>-<squeezer>-<caller(s)>" for
+        # vs_squeeze, mirroring spots.squeeze / spots.vs_squeeze.
+        if not villain_position:
+            return None
+        sub = pos_block.get(villain_position)
+        value = sub.get(hand) if isinstance(sub, dict) else None
     else:
         if not villain_position:
             return None

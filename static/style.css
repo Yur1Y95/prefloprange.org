@@ -248,59 +248,41 @@ body {
   color: var(--text-dim);
 }
 
-/* Table — stadium / racetrack shape (elongated ~2:1, not a circle).
-   border-radius:9999px makes CSS cap the radius at half the height → clean
-   stadium at any box size (handy for future responsive scaling). */
+/* Table — rendered PNG backdrop + HTML overlay (B.1-table-art, 2026-06-03).
+   The image (static/table_art/table.png, 1500×860 RGBA) carries the volumetric
+   rail and felt. .table-area is a percentage-positioned overlay that covers the
+   felt rectangle inside the image and hosts all HTML layers (seats, pot, chips).
+   Image drives the height → no fixed height on .table-wrap needed. */
 .table-wrap {
   position: relative;
   width: 680px;
-  height: 330px;
   flex-shrink: 0;
 }
-/* Black padded rail — volumetric: lit at the top edge, dark and shadowed
-   at the bottom, with an outer drop shadow that lifts the table off the bg. */
-.table-rim {
-  position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  background:
-    linear-gradient(to bottom, var(--rim-hi) 0%, var(--rim) 42%, #050505 100%);
-  box-shadow:
-    0 14px 44px rgba(0,0,0,.75),            /* table lifts off the page */
-    0 0 0 1px #000,                         /* crisp outer edge */
-    inset 0 2px 2px rgba(255,255,255,.14),  /* top highlight on the rail */
-    inset 0 -4px 8px rgba(0,0,0,.65);       /* rail rounds away at the bottom */
+/* Backdrop image — rubber (fills container width, height auto from ratio).
+   Surround is transparent (table.png, 2026-06-15), so the table floats on the
+   page bg with no black rectangle; drop-shadow follows the stadium alpha shape
+   and grounds it with depth (replaces the baked-in shadow that was removed). */
+.table-bg {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 8px 28px rgba(0, 0, 0, 0.55));
 }
-/* Vivid casino felt: lit in the center, falling off to a dark vignette near
-   the rail. A dark seam at the very edge separates felt from the black rail. */
-.table-felt {
+/* Felt-area overlay: left 4.667% / top 9.07% / width 90.67% / height 79.07%
+   (the felt rectangle within the 1500×860 PNG, stadium 2:1 preserved).
+   flex center for the pot-block (non-absolute child); seats/chips/timer are
+   absolutely positioned and unaffected by the flex layout. */
+.table-area {
   position: absolute;
-  inset: 16px;
-  border-radius: 9999px;
-  background:
-    radial-gradient(ellipse 76% 92% at 50% 40%,
-      var(--felt-hi)     0%,
-      var(--felt)        46%,
-      var(--felt-shadow) 100%);
-  box-shadow:
-    inset 0 0 70px rgba(0,0,0,.45),         /* soft vignette toward the rail */
-    inset 0 2px 5px rgba(0,0,0,.55),        /* shadow cast by the rail above */
-    0 0 0 2px rgba(0,0,0,.45);              /* dark seam at the felt edge */
-  overflow: hidden;
+  left: 4.667%;
+  top: 9.07%;
+  width: 90.67%;
+  height: 79.07%;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-/* Betting line — the lit ring just inside the rail, like a real casino table.
-   (Replaces the old grid-texture placeholder.) */
-.table-felt::before {
-  content: '';
-  position: absolute;
-  inset: 13px;
-  border-radius: 9999px;
-  border: 1px solid var(--felt-line);
-  box-shadow: 0 1px 1px rgba(0,0,0,.25);    /* line sits in the felt */
-  pointer-events: none;
 }
 
 /* Action log sits just above the pot in open felt — clear of the top seats,
@@ -322,7 +304,27 @@ body {
   text-overflow: ellipsis;
 }
 
+/* One-line "Total Pot : 5.6 BB" pill (GG-style). Dark translucent fill, thin
+   gold hairline, gold text on one line — label and value share the same weight
+   so they read as a single string. Used in Drill + Learn. */
 .pot-block {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  z-index: 3;
+  background: rgba(0,0,0,.45);
+  border: 1px solid rgba(201,168,76,.45);
+  border-radius: 9999px;
+  padding: 3px 12px;
+  white-space: nowrap;
+  box-shadow: 0 1px 5px rgba(0,0,0,.45), inset 0 1px 1px rgba(255,255,255,.05);
+}
+.pot-label { font-family: var(--font-ui); font-size: 12px; font-weight: 400; letter-spacing: .3px; color: var(--gold-hi); }
+.pot-value { font-family: var(--font-ui); font-size: 12px; font-weight: 400; letter-spacing: .3px; color: var(--gold-hi); }
+
+/* Postflop pot block keeps the old two-line look (postflop is frozen): its own
+   POT / TO CALL stacked layout via this scoped class. */
+.pot-block-pf {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -332,8 +334,8 @@ body {
   border-radius: 8px;
   padding: 6px 14px;
 }
-.pot-label { font-family: var(--font-ui); font-size: 9px; letter-spacing: 2px; color: var(--text-dim); }
-.pot-value { font-family: var(--font-ui); font-size: 18px; font-weight: 700; color: var(--gold-hi); }
+.pot-block-pf .pot-label { font-size: 9px; letter-spacing: 2px; color: var(--text-dim); }
+.pot-block-pf .pot-value { font-size: 18px; font-weight: 700; color: var(--gold-hi); }
 
 /* P-011 empty-state banner — centred in the felt when a spot has no data. */
 .drill-empty {
@@ -365,10 +367,11 @@ body {
   color: var(--text-mid);
 }
 
-/* Timer ring SVG */
+/* Timer ring SVG — lives inside .table-area, inset:0 traces the felt edge via
+   the inner <rect> with rx=147 in the SVG (preserveAspectRatio:none fills it). */
 .timer-ring {
   position: absolute;
-  inset: 16px;
+  inset: 0;
   pointer-events: none;
   z-index: 5;
 }
@@ -413,8 +416,9 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,.55);
   position: relative;
 }
-.mini-back.b1 { transform: rotate(-8deg) translateX(5px); }
-.mini-back.b2 { transform: rotate(8deg) translateX(-5px); margin-left: -9px; }
+.mini-back { transform-origin: bottom center; }   /* pivot from the bottom, like the hero fan */
+.mini-back.b1 { transform: rotate(calc(-1 * var(--card-fan))) translateX(5px); }
+.mini-back.b2 { transform: rotate(var(--card-fan)) translateX(-5px); margin-left: -9px; }
 
 .seat-circle {
   width: 46px; height: 46px;
@@ -523,7 +527,9 @@ body {
 .coins { position: relative; }
 .coin {
   position: absolute; left: 0;
-  width: var(--cw, 19px); height: var(--ch, 8px);
+  /* --cs (chip scale) is set by chips.js per stack; disc size tracks the live
+     table, keeping the JS stacking math (also scaled by --cs) in lockstep. */
+  width: calc(19px * var(--cs, 1)); height: calc(8px * var(--cs, 1));
   border-radius: 50%;
   background:
     radial-gradient(ellipse at 50% 30%, rgba(255,255,255,.30), rgba(255,255,255,0) 55%),
@@ -546,7 +552,7 @@ body {
   border: 1px solid var(--ring);
   display: flex; align-items: center; justify-content: center;
   font-family: var(--font-ui); font-weight: 800; color: var(--ink);
-  font-size: 5.5px; letter-spacing: -.2px;
+  font-size: calc(5.5px * var(--cs, 1)); letter-spacing: -.2px;
 }
 /* denomination palettes (anchors: white=1, red=5, green=25) */
 .d-01 { --body:#54606a; --edge:#aab4bd; --inlay:#3f4a53; --ink:#e6edf2; --ring:#cfd8df; }
@@ -559,7 +565,7 @@ body {
 /* amount pill under a player bet stack */
 .chip-amt {
   margin-top: 5px;
-  font-family: var(--font-ui); font-size: 11px; font-weight: 700;
+  font-family: var(--font-ui); font-size: calc(11px * var(--cs, 1)); font-weight: 700;
   color: var(--text); letter-spacing: .3px;
   background: rgba(0,0,0,.5); border-radius: 9999px;
   padding: 1px 8px; box-shadow: 0 1px 3px rgba(0,0,0,.5); white-space: nowrap;
@@ -571,6 +577,16 @@ body {
   gap: 12px;
   flex-shrink: 0;
 }
+/* Hero hole cards sit nearly flush (user 2026-06-15). Scoped to the two hero
+   containers only — the postflop board (#pfBoard) reuses .hero-cards and keeps
+   the 12px gap between community cards. */
+#heroCards, #learnHeroCards { gap: 2px; }
+/* Hero hole cards: plain vertical row. The GG-style fan/tilt was removed per
+   user (2026-06-14) — the .hero-cards base (display:flex; gap:12px) is enough,
+   so hero cards sit upright side by side, like before the fan.
+   The --card-fan token still drives the subtle opponent card-back fan
+   (.mini-back, below); hero cards no longer reference it. */
+:root { --card-fan: 9deg; }
 .card {
   width: 64px;
   height: 92px;
@@ -624,9 +640,11 @@ body {
   animation: deal .3s cubic-bezier(.34,1.56,.64,1) both;
 }
 .card.deal-in:nth-child(2) { animation-delay: .08s; }
+/* rotate(var(--fan)) carries the hero fan through to the resting frame; cards
+   outside .hero-cards leave --fan unset → rotate(0), so the board is unaffected. */
 @keyframes deal {
-  from { transform: translateY(-24px) scale(.85); opacity: 0; }
-  to   { transform: translateY(0)     scale(1);   opacity: 1; }
+  from { transform: translateY(-24px) scale(.85) rotate(var(--fan, 0deg)); opacity: 0; }
+  to   { transform: translateY(0)     scale(1)   rotate(var(--fan, 0deg)); opacity: 1; }
 }
 
 /* ── ACTION BAR ─────────────────────────────────────── */
@@ -658,6 +676,17 @@ body {
 .action-btn.btn-open  { background: var(--c-open); border-color: #1a6030; color: #7effa8; }
 .action-btn.btn-3bet  { background: var(--c-3bet); border-color: #6a1828; color: #ffb3c0; }
 .action-btn.btn-4bet  { background: var(--c-4bet); border-color: #4a1a6a; color: #e0b3ff; }
+/* "Показать ответ" — neutral/meta, not a strategy colour. Equal footprint to
+   the action buttons (decision: don't shame the honest "don't know") but a
+   muted slate so it reads as a meta-action, not a claimed line. */
+.action-btn.btn-reveal {
+  background: #2a2f3a;
+  border-color: rgba(255,255,255,.18);
+  color: #c8d0dc;
+  text-transform: none;
+  letter-spacing: .3px;
+  font-weight: 600;
+}
 
 /* ── FEEDBACK STRIP ─────────────────────────────────── */
 .feedback-strip {
@@ -968,6 +997,39 @@ body {
   position: relative;
   z-index: 1;
   text-shadow: 0 1px 3px rgba(0,0,0,.7);
+}
+
+/* ── B.3 matrix redesign — variant C (Dense), ported 2026-06-14 ────────────
+   Scoped to the Visualizer (#matrix) and Editor (#editorMatrix) grids only;
+   the Drill Show-Range modal (#hintGrid) keeps its own modal styling. Colours
+   are deliberately UNCHANGED — the matrix palette is tracked in design.md §9.1.
+   Prototype-эталон: static/matrix_preview.html. The per-hand frequency readout
+   already lives in the Visualizer/Editor hover panels (#vizHover/#editorHover),
+   so the prototype's standalone floating tooltip is not needed in-app. */
+#matrix, #editorMatrix {
+  --mtx-gap: 2px;            /* Dense preset, chosen 2026-06-13 (airy 7 / hybrid 4) */
+  --mtx-rad: 3px;            /* Dense (airy 11 / hybrid 7) */
+  gap: var(--mtx-gap);
+}
+#matrix .matrix-cell, #editorMatrix .matrix-cell {
+  border: none;                       /* depth now comes from the inset ring */
+  border-radius: var(--mtx-rad);
+  display: block;                     /* label is absolutely positioned now */
+  /* tile reads as a chip: subtle inner dark ring + soft top highlight */
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.28),
+              inset 0 2px 3px rgba(255,255,255,.05);
+  transition: transform .12s cubic-bezier(.16,1,.3,1), box-shadow .12s;
+}
+#matrix .matrix-cell:hover, #editorMatrix .matrix-cell:hover {
+  filter: none;                       /* override the old brightness zoom */
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0,0,0,.55), inset 0 0 0 1px var(--gold);
+  z-index: 3;
+}
+#matrix .cell-label, #editorMatrix .cell-label {
+  position: absolute;                 /* pinned top-left — pro-tool look */
+  top: 4px; left: 5px;
+  color: #fff;
 }
 
 /* ── VISUALIZER LEGEND PANEL ─────────────────────────── */
@@ -1374,6 +1436,8 @@ body {
   z-index: 0;
 }
 .pf-break-row.is-draw .pf-bar { background: rgba(63,127,181,.18); }
+.pf-break-row.is-air .pf-bar { background: var(--wrong-bg); }
+.pf-break-row.is-air .pf-lbl { color: #d98b80; }
 .pf-break-row .pf-lbl,
 .pf-break-row .pf-num { position: relative; z-index: 1; }
 .pf-break-row .pf-lbl { color: var(--text); }
@@ -1387,6 +1451,42 @@ body {
   font-size: 11px;
   color: var(--text-dim);
   padding: 3px 6px;
+}
+.pf-break-head {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-dim);
+  margin: 7px 0 1px;
+  padding: 0 6px;
+}
+.pf-break-row.has-tip { cursor: help; }
+.pf-break-row.has-tip:hover { background: rgba(255,255,255,.04); }
+.pf-tip {
+  display: none;
+  position: fixed;
+  z-index: 9999;
+  max-width: 260px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: #0e1512;
+  border: 1px solid rgba(201,168,76,.4);
+  box-shadow: 0 6px 20px rgba(0,0,0,.6);
+  pointer-events: none;
+}
+.pf-tip-h {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--gold);
+  margin-bottom: 3px;
+}
+.pf-tip-b {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+  word-spacing: 1px;
 }
 /* ── SHOW RANGE BUTTON (feedback strip) ─────────────────── */
 .fb-hint {
@@ -1750,9 +1850,9 @@ body {
   letter-spacing: 1px;
   color: var(--text-dim);
 }
-.lfb-verdict.correct { color: #5ab070; }
-.lfb-verdict.wrong   { color: #ff8080; }
-.learn-easy-btn,
+.lfb-verdict.correct  { color: #5ab070; }
+.lfb-verdict.wrong    { color: #ff8080; }
+.lfb-verdict.revealed { color: #c8d0dc; }   /* neutral — honest "don't know" */
 .learn-next-btn {
   padding: 8px 16px;
   border-radius: 6px;
@@ -1763,17 +1863,6 @@ body {
   text-transform: uppercase;
   cursor: pointer;
   transition: background 0.15s;
-}
-.learn-easy-btn {
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: transparent;
-  color: var(--text-mid);
-}
-.learn-easy-btn:hover:not(:disabled) {
-  border-color: #5ab070;
-  color: #5ab070;
-}
-.learn-next-btn {
   border: 1px solid #c9a84c;
   background: rgba(201, 168, 76, 0.12);
   color: #c9a84c;
@@ -1781,7 +1870,6 @@ body {
 .learn-next-btn:hover:not(:disabled) {
   background: rgba(201, 168, 76, 0.22);
 }
-.learn-easy-btn:disabled,
 .learn-next-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -1942,18 +2030,16 @@ body {
     color: var(--text-dim);
   }
 
-  /* — TABLE: fluid width, fixed 680:330 stadium ratio. Seats are positioned
-       in % (see SLOT_POS in drill.js) so they follow the box automatically.
-       Only the fixed-px seat contents need shrinking, below. — */
+  /* — TABLE: fluid width — image drives the height automatically. Seats are
+       in % (SLOT_POS) so they scale with .table-area. Fixed-px seat contents
+       still need shrinking (below). — */
   .table-section { padding: 10px 8px 14px; gap: 10px; }
   .table-wrap {
     width: min(94vw, 680px);
     height: auto;
-    aspect-ratio: 680 / 330;
+    /* no aspect-ratio override needed — the backdrop image sets it */
   }
-  .table-felt   { inset: 10px; }
-  .table-felt::before { inset: 8px; }
-  .timer-ring   { inset: 10px; }
+  .timer-ring   { inset: 0; }
 
   /* Seat contents (fixed px) scaled down to match the smaller table */
   .seat-circle  { width: 34px; height: 34px; font-size: 10px; }
@@ -1961,17 +2047,19 @@ body {
   .mini-back    { width: 19px; height: 27px; border-radius: 4px; }
   .seat-name    { font-size: 8px; }
   .seat-stack   { font-size: 10px; padding: 1px 6px; }
-  .pot-block    { padding: 4px 10px; }
-  .pot-value    { font-size: 14px; }
-  .pot-label    { font-size: 8px; }
+  .pot-block    { padding: 3px 11px; }
+  .pot-value    { font-size: 11px; }
+  .pot-label    { font-size: 11px; }
   .action-log   { font-size: 9px; max-width: 80%; }
 
-  /* Blind / raise chips: shrink while keeping the JS-set centering transform */
+  /* Legacy postflop bet token still uses the fixed-scale shrink. The new
+     .chip-stack/.chip-pot scale continuously via --cs (chips.js, GG method),
+     so they no longer need a mobile transform override. */
   .bet-chip            { transform: translate(-50%, -50%) scale(.82); }
-  .chip-stack, .chip-pot { transform: translate(-50%, -50%) scale(.82); }
 
-  /* Hero hole cards below the table */
-  .hero-cards   { gap: 8px; }
+  /* Hero hole cards below the table — vertical row, tighter gap for the smaller
+     mobile cards (fan removed 2026-06-14). Scoped to the hero hands. */
+  #heroCards, #learnHeroCards { gap: 2px; }
   .card         { width: 48px; height: 69px; border-radius: 6px; }
   .card-center  { font-size: 24px; }
   .card-corner  { top: 4px; left: 5px; }
@@ -1985,7 +2073,7 @@ body {
   .seg          { min-height: 44px; }
   .pos-buttons .seg { min-height: 44px; }
   .mini-select  { min-height: 40px; }
-  .fb-next, .fb-hint, .learn-next-btn, .learn-easy-btn { min-height: 44px; }
+  .fb-next, .fb-hint, .learn-next-btn { min-height: 44px; }
   .right-tab    { min-height: 40px; }
 
   /* Feedback strip can wrap on narrow screens */
@@ -1999,3 +2087,39 @@ body {
 
   .spot-line { font-size: 11px; }
 }
+
+/* ── MATRIX HOVER TOOLTIP (Track B.3, 2026-06-15) ───────────────
+   Floating action-frequency card shown next to the cursor on .matrix-cell hover
+   (Visualizer + Editor). Ported from matrix_preview.html #tip — the number lives
+   here, the cell stays clean, replacing the cramped frequency line above the grid.
+   Built/positioned by static/matrix_tip.js; pointer-events:none so it never eats
+   matrix clicks (editor paint stays intact). */
+.matrix-tip {
+  position: fixed;
+  z-index: 99;
+  pointer-events: none;
+  display: none;
+  background: rgba(8, 13, 10, 0.96);
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  padding: 8px 11px;
+  min-width: 120px;
+  font-family: var(--font-ui);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+}
+.matrix-tip .mtip-hand {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold-hi);
+  margin-bottom: 5px;
+}
+.matrix-tip .mtip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 2px;
+}
+.matrix-tip .mtip-k { color: var(--text-mid); }
+.matrix-tip .mtip-v { font-variant-numeric: tabular-nums; }

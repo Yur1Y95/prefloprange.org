@@ -7,9 +7,14 @@
 // the next card; no visible reveal yet (Stage 4 will insert that step).
 //
 // Roadmap:
-//   Stage 4 — reveal: thin feedback strip with verdict + Next + Easy buttons,
-//             same shape as drill's feedback-strip.
+//   Stage 4 — reveal: thin feedback strip with verdict + Next, same shape as
+//             drill's feedback-strip.
 //   Stage 5 — end-of-session summary when queue_size hits 0.
+//
+// Answer options: the committed poker actions (fold/open/call/3bet/4bet) plus
+// "Показать ответ" — an honest "I don't know" that reveals the answer and
+// grades AGAIN, so a forced 50/50 guess can't register as correct. The old
+// Anki-style Easy button was removed (CLAUDE.md decision #6).
 // ============================================================================
 
 (() => {
@@ -29,6 +34,7 @@
   const fileSelect = document.getElementById('learnFileSelect');
   const scopeBtns  = document.querySelectorAll('#learnScopeBtns [data-lscope]');
   const scopeLockedHint = document.getElementById('learnScopeLockedHint');
+  const limitBtns  = document.querySelectorAll('#learnLimitBtns [data-llimit]');
   const counters   = document.getElementById('learnCounters');
   const startBtn   = document.getElementById('learnStartBtn');
   const resetBtn   = document.getElementById('learnResetBtn');
@@ -42,13 +48,13 @@
 
   // Card screen
   const spotLine    = document.getElementById('learnSpotLine');
+  const potValue    = document.getElementById('learnPotValue');
   const actionBar   = document.getElementById('learnActionBar');
   const queueBadge  = document.getElementById('learnQueueBadge');
   const backBtn     = document.getElementById('learnBackBtn');
-  // Reveal strip (Stage 4 — shown after each answer, holds Easy + Next)
+  // Reveal strip (shown after each answer, holds the verdict + Next)
   const feedbackStrip = document.getElementById('learnFeedbackStrip');
   const lfbVerdict    = document.getElementById('lfbVerdict');
-  const learnEasyBtn  = document.getElementById('learnEasyBtn');
   const learnNextBtn  = document.getElementById('learnNextBtn');
 
   // Summary screen (Stage 5 — shown when the day's queue is empty)
@@ -58,7 +64,7 @@
     answered: document.getElementById('lsAnswered'),
     correct:  document.getElementById('lsCorrect'),
     accuracy: document.getElementById('lsAccuracy'),
-    easy:     document.getElementById('lsEasy'),
+    shown:    document.getElementById('lsShown'),
   };
 
   // ── State ────────────────────────────────────────────────────────────────
@@ -66,12 +72,13 @@
     filesLoaded:    false,
     currentFile:    '',
     selectedScope:  'all',          // 'all' | 'RFI' | 'vs_RFI' | 'vs_3bet'
+    newLimit:       15,             // new cards/day; 0 = unlimited (sent as a big number)
     initialized:    false,
     rangeConfigs:   {},             // file -> {positions: [...]} cache
     currentCard:    null,           // card payload from /api/srs/next
     // Reveal-state buffering: when the action is answered, we hold onto the
-    // next card and the answered card's id until the user clicks Next (or
-    // Easy → upgrade → Next). This is what lets the reveal strip persist.
+    // next card and the answered card's id until the user clicks Next. This
+    // is what lets the reveal strip persist.
     bufferedNext:        null,
     bufferedQueueSize:   0,
     lastAnsweredCardId:  null,
@@ -79,16 +86,22 @@
     // Session counters — reset every time the user clicks "Учить" from
     // entry. Used to populate the end-of-session summary screen.
     session: {
-      answered:    0,
-      correct:     0,
-      easyClicks:  0,
+      answered: 0,
+      correct:  0,
+      shown:    0,   // times the user pressed "Показать ответ" (didn't know)
     },
   };
 
   function resetSession() {
-    state.session.answered   = 0;
-    state.session.correct    = 0;
-    state.session.easyClicks = 0;
+    state.session.answered = 0;
+    state.session.correct  = 0;
+    state.session.shown    = 0;
+  }
+
+  // The daily new-card cap to send to the API. The "∞" button is stored as 0;
+  // translate it to a number large enough to never clip any deck (max ~5915).
+  function effectiveNewLimit() {
+    return state.newLimit === 0 ? 100000 : state.newLimit;
   }
 
   // ── Tab switching ────────────────────────────────────────────────────────
@@ -129,7 +142,11 @@
       for (const f of files) {
         const opt = document.createElement('option');
         opt.value = f.filename;
-        opt.textContent = f.label || f.filename;
+        // Show "filename · label" to match Drill/Visualizer (P-008): the label
+        // alone is ambiguous (several packs auto-label "Cash 6max 100bb").
+        const name = f.filename.replace(/\.json$/, '');
+        const meta = (f.label && f.label !== name) ? f.label : (f.stack_depth || '');
+        opt.textContent = (meta && meta !== name) ? `${name} · ${meta}` : name;
         fileSelect.appendChild(opt);
       }
       state.currentFile = files[0].filename;
@@ -197,6 +214,17 @@
       scopeBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.selectedScope = btn.dataset.lscope;
+    });
+  });
+
+  // ── New-cards/day picker ─────────────────────────────────────────────────
+  // Not locked after init (unlike scope): it's a cap on today's queue, not part
+  // of the deck, so the user can change it between sessions freely.
+  limitBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      limitBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.newLimit = parseInt(btn.dataset.llimit, 10);
     });
   });
 
@@ -285,7 +313,8 @@
   // ── Card flow: fetch next, render, handle action ─────────────────────────
   async function goToNextCard() {
     try {
-      const url = `/api/srs/next?file=${encodeURIComponent(state.currentFile)}`;
+      const url = `/api/srs/next?file=${encodeURIComponent(state.currentFile)}`
+                + `&new_limit=${effectiveNewLimit()}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -313,6 +342,12 @@
     const positions = state.rangeConfigs[state.currentFile]?.positions
                    || ['UTG', 'MP', 'CO', 'BTN', 'SB', 'BB'];
 
+    // Preflop money context (posted blinds, reduced stacks, raiser bets, pot) so
+    // the Learn table matches Drill. Drill gets this from the server; Learn has
+    // only the SRS card (spot/position/villain) and recomputes it client-side.
+    const ctx = buildLearnContext(positions, card.position, card.spot,
+                                  card.villain_position || null);
+
     // Seats — delegates to drill.js's parameterized renderer
     window.renderSeatsInto({
       seatsId:    'learnSeats',
@@ -320,8 +355,19 @@
       heroPos:    card.position,
       spot:       card.spot,
       villainPos: card.villain_position || null,
-      stacks:     null,   // 100 BB default; learn doesn't model varied stacks
+      stacks:     ctx.stacks,
     });
+
+    // Posted blinds + raiser chips on Learn's own felt (same renderer as Drill).
+    window.renderChipsInto({
+      seatsId:   'learnSeats',
+      positions: positions,
+      heroPos:   card.position,
+      context:   ctx,
+    });
+
+    // Pot pill — real per-spot size, not the static 1.5 default.
+    if (potValue) potValue.textContent = ctx.pot.toFixed(1) + ' BB';
 
     // Cards — sample a concrete two-card combo from the hand notation
     const [c1, c2] = sampleCombo(card.hand);
@@ -347,6 +393,58 @@
     return card.spot;
   }
 
+  // Build the preflop money context for a Learn card — posted blinds, reduced
+  // stacks, raiser bets, and pot — so the table matches Drill. This MIRRORS the
+  // per-spot math in drill_engine.py (get_drill_hand_*). Drill receives this
+  // from the server; Learn only has the SRS card (spot/position/villain), so it
+  // is recomputed here. The bet sizes MUST stay in sync with drill_engine's
+  // constants (OPEN_SIZE / THREEBET_MULT / FOURBET_MULT / ISO_SIZE). Verified
+  // numerically against the engine in test_drill_blinds.py.
+  function buildLearnContext(positions, heroPos, spot, villainPos) {
+    const SB = 0.5, BB = 1, OPEN = 2.5, TB_MULT = 3.5, FB_MULT = 2.5;
+    const r1 = x => Math.round(x * 10) / 10;   // round to 0.1, like the engine
+
+    const stacks = {};
+    positions.forEach(p => { stacks[p] = 100; });
+    if ('SB' in stacks) stacks.SB = r1(stacks.SB - SB);
+    if ('BB' in stacks) stacks.BB = r1(stacks.BB - BB);
+    let pot = r1(SB + BB);
+    const ctx = { stacks, pot, open_raiser: null, open_size: 0 };
+
+    if (spot === 'vs_RFI' && villainPos) {
+      stacks[villainPos] = r1(stacks[villainPos] - OPEN);          // villain opens
+      pot = r1(pot + OPEN);
+      ctx.open_raiser = villainPos; ctx.open_size = OPEN;
+    } else if (spot === 'vs_3bet' && villainPos) {
+      stacks[heroPos]    = r1(stacks[heroPos] - OPEN);             // hero opened
+      pot = r1(pot + OPEN);
+      const tb = r1(OPEN * TB_MULT);
+      stacks[villainPos] = r1(stacks[villainPos] - tb);            // villain 3-bets
+      pot = r1(pot + tb);
+      ctx.open_raiser = heroPos;     ctx.open_size = OPEN;
+      ctx.threebet_raiser = villainPos; ctx.threebet_size = tb;
+    } else if (spot === 'vs_4bet' && villainPos) {
+      stacks[villainPos] = r1(stacks[villainPos] - OPEN);          // villain opens
+      pot = r1(pot + OPEN);
+      const tb = r1(OPEN * TB_MULT);
+      stacks[heroPos]    = r1(stacks[heroPos] - tb);               // hero 3-bets
+      pot = r1(pot + tb);
+      const fb = r1(OPEN * TB_MULT * FB_MULT);
+      const fbAdd = r1(fb - OPEN);
+      stacks[villainPos] = r1(stacks[villainPos] - fbAdd);         // villain 4-bets
+      pot = r1(pot + fbAdd);
+      ctx.open_raiser = heroPos;        ctx.open_size = OPEN;
+      ctx.threebet_raiser = heroPos;    ctx.threebet_size = tb;
+      ctx.fourbet_raiser = villainPos;  ctx.fourbet_size = fb;
+    } else if (spot === 'iso' && villainPos) {
+      stacks[villainPos] = r1(stacks[villainPos] - BB);            // villain limps
+      pot = r1(pot + BB);
+      ctx.open_raiser = villainPos; ctx.open_size = BB;
+    }
+    ctx.pot = pot;
+    return ctx;
+  }
+
   function actionsForSpot(spot) {
     // Fold first, then the aggressive line, then passive call (where it exists)
     if (spot === 'RFI')      return ['fold', 'open'];
@@ -368,9 +466,27 @@
       btn.addEventListener('click', () => handleAction(action));
       actionBar.appendChild(btn);
     });
+    // "Показать ответ" — the honest "I don't know" escape from the forced
+    // binary. Pressing it reveals the answer and grades AGAIN, so a guess the
+    // user couldn't actually make never registers as a correct answer.
+    const revealBtn = document.createElement('button');
+    revealBtn.className   = 'action-btn btn-reveal';
+    revealBtn.textContent = 'Показать ответ';
+    revealBtn.addEventListener('click', handleReveal);
+    actionBar.appendChild(revealBtn);
   }
 
-  async function handleAction(action) {
+  // A committed poker action (fold/open/call/3bet/4bet).
+  function handleAction(action) {
+    return submitAnswer({ user_action: action });
+  }
+
+  // "Показать ответ" — user didn't know; reveal + grade AGAIN.
+  function handleReveal() {
+    return submitAnswer({ reveal: true });
+  }
+
+  async function submitAnswer(extra) {
     if (!state.currentCard) return;
     setActionButtonsDisabled(true);
     try {
@@ -378,10 +494,10 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          file:        state.currentFile,
-          card_id:     state.currentCard.card_id,
-          user_action: action,
-          marked_easy: false,    // Easy is now applied post-hoc via upgrade_easy
+          file:      state.currentFile,
+          card_id:   state.currentCard.card_id,
+          new_limit: effectiveNewLimit(),
+          ...extra,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -390,9 +506,10 @@
                   '· next queue:', data.queue_size);
       // Session tallies — feed the end-of-session summary
       state.session.answered += 1;
-      if (data.grading.in_strategy) state.session.correct += 1;
+      if (data.grading.in_strategy)  state.session.correct += 1;
+      if (data.grading.revealed)     state.session.shown   += 1;
       // Buffer the next card and reveal the verdict. Action buttons stay
-      // disabled until the user clicks Next (or Easy → Next).
+      // disabled until the user clicks Next.
       showReveal(data.grading, data.card, data.next, data.queue_size);
     } catch (e) {
       console.error('[learn.js] /api/srs/answer failed:', e);
@@ -407,18 +524,19 @@
     state.lastAnsweredCardId = answeredCard.card_id;
     state.lastAnswerCorrect  = !!grading.in_strategy;
 
-    if (grading.in_strategy) {
+    const correct = answeredCard.dominant_action;
+    const correctLabel = ACTION_LABELS[correct] || correct;
+    if (grading.revealed) {
+      // Honest "don't know": neutral framing, no ✗ shame. Graded AGAIN.
+      lfbVerdict.textContent = `Answer: ${correctLabel}`;
+      lfbVerdict.className = 'lfb-verdict revealed';
+    } else if (grading.in_strategy) {
       const label = ACTION_LABELS[grading.user_action] || grading.user_action;
       lfbVerdict.textContent = `✓ ${label}`;
       lfbVerdict.className = 'lfb-verdict correct';
-      learnEasyBtn.style.display = '';
-      learnEasyBtn.disabled = false;
     } else {
-      const correct = answeredCard.dominant_action;
-      const label   = ACTION_LABELS[correct] || correct;
-      lfbVerdict.textContent = `✗ Wrong — should be ${label}`;
+      lfbVerdict.textContent = `✗ Wrong — should be ${correctLabel}`;
       lfbVerdict.className = 'lfb-verdict wrong';
-      learnEasyBtn.style.display = 'none';   // Easy only on correct answers
     }
     learnNextBtn.disabled = false;
     feedbackStrip.style.display = '';
@@ -426,7 +544,6 @@
 
   function hideReveal() {
     feedbackStrip.style.display = 'none';
-    learnEasyBtn.style.display  = 'none';
     lfbVerdict.textContent = '';
     lfbVerdict.className = 'lfb-verdict';
   }
@@ -446,34 +563,6 @@
 
   // Next click: drop the buffer, render the next card.
   learnNextBtn.addEventListener('click', () => {
-    advanceToBufferedNext();
-  });
-
-  // Easy click: upgrade the just-answered GOOD to EASY, then advance.
-  // Easy is only visible after a correct answer, so we don't double-check.
-  learnEasyBtn.addEventListener('click', async () => {
-    if (!state.lastAnsweredCardId) return;
-    learnEasyBtn.disabled = true;
-    learnNextBtn.disabled = true;
-    try {
-      const res = await fetch('/api/srs/upgrade_easy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          file:    state.currentFile,
-          card_id: state.lastAnsweredCardId,
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      console.log('[learn.js] upgrade_easy:', data);
-      state.session.easyClicks += 1;
-    } catch (e) {
-      // Non-fatal — log and still advance. Better to lose one Easy bump
-      // than to strand the user on a card with no usable buttons.
-      console.error('[learn.js] /api/srs/upgrade_easy failed:', e);
-      showStatus(`Easy upgrade failed: ${e.message}`, true);
-    }
     advanceToBufferedNext();
   });
 
@@ -497,13 +586,13 @@
 
   function showEndOfSession() {
     // Populate counters from the just-ended session, then show the screen.
-    const { answered, correct, easyClicks } = state.session;
+    const { answered, correct, shown } = state.session;
     summaryNums.answered.textContent = answered;
     summaryNums.correct.textContent  = correct;
     summaryNums.accuracy.textContent = answered
       ? `${Math.round((correct / answered) * 100)}%`
       : '—';
-    summaryNums.easy.textContent     = easyClicks;
+    summaryNums.shown.textContent    = shown;
     showSummaryScreen();
     // Refresh entry counters in the background so they're fresh when the
     // user clicks Close.

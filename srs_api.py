@@ -39,7 +39,7 @@ DATA_DIR     = os.path.join(BASE_DIR, "data")
 SRS_DIR      = os.path.join(BASE_DIR, "srs_state")
 
 # Allowed scope values for /api/srs/init — anything else is rejected
-VALID_SPOTS = {"RFI", "vs_RFI", "vs_3bet"}
+VALID_SPOTS = {"RFI", "vs_RFI", "vs_3bet", "vs_4bet", "iso"}
 
 
 def _ensure_srs_dir() -> None:
@@ -118,8 +118,10 @@ class InitRequest(BaseModel):
 class AnswerRequest(BaseModel):
     file: str
     card_id: str
-    user_action: str
+    user_action: str = ""
     marked_easy: bool = False
+    reveal: bool = False   # "Показать ответ" — user didn't know; force AGAIN
+    new_limit: int = srs.NEW_CARDS_PER_DAY  # daily new-card cap for the follow-up queue
 
 
 class UpgradeEasyRequest(BaseModel):
@@ -202,12 +204,19 @@ def srs_init(req: InitRequest):
 
 
 @router.get("/next")
-def srs_next(file: str = Query(...)):
-    """Returns the next due card (or null if queue is empty for today)."""
+def srs_next(file: str = Query(...),
+             new_limit: int = Query(srs.NEW_CARDS_PER_DAY, ge=0)):
+    """Returns the next due card (or null if queue is empty for today).
+
+    ``new_limit`` caps how many *new* cards enter today's queue (reviews that
+    are due are always served regardless). The frontend passes the user's pick
+    (10/15/30/50, or a large number for "unlimited"); the default matches
+    NEW_CARDS_PER_DAY so any caller that omits it behaves as before.
+    """
     cards = _load_deck(file)
     if not cards:
         raise HTTPException(status_code=404, detail="Deck not initialized. Call /api/srs/init first.")
-    due = srs.get_due_cards(cards, today=date.today())
+    due = srs.get_due_cards(cards, today=date.today(), new_limit=new_limit)
     if not due:
         return {"card": None, "queue_size": 0}
     return {"card": _card_for_ui(due[0], reveal_strategy=False),
@@ -228,9 +237,18 @@ def srs_answer(req: AnswerRequest):
 
     card = _find_card(cards, req.card_id)
 
-    # Objective grading -> SM-2 rating -> apply
-    rating = srs.grade_answer(card, req.user_action, marked_easy=req.marked_easy)
-    in_strategy = card.correct_strategy.get(req.user_action, 0) > 0
+    # Two paths:
+    #   reveal=True  → the user pressed "Показать ответ" (didn't know). We force
+    #                  AGAIN so the card comes back soon — an honest "don't know"
+    #                  must not masquerade as a correct guess. user_action is
+    #                  irrelevant here; in_strategy is False by definition.
+    #   reveal=False → normal answer: objective grading by strategy membership.
+    if req.reveal:
+        rating = srs.AGAIN
+        in_strategy = False
+    else:
+        rating = srs.grade_answer(card, req.user_action, marked_easy=req.marked_easy)
+        in_strategy = card.correct_strategy.get(req.user_action, 0) > 0
     srs.update_card(card, rating, today=date.today())
     _save_deck(req.file, cards)
 
@@ -238,7 +256,7 @@ def srs_answer(req: AnswerRequest):
     answer_view = _card_for_ui(card, reveal_strategy=True)
 
     # Find the next card to drill (excluding this one since we just updated it)
-    due = srs.get_due_cards(cards, today=date.today())
+    due = srs.get_due_cards(cards, today=date.today(), new_limit=req.new_limit)
     due = [c for c in due if c.card_id != card.card_id]
     next_card = _card_for_ui(due[0], reveal_strategy=False) if due else None
 
@@ -248,6 +266,7 @@ def srs_answer(req: AnswerRequest):
             "rating":       rating,           # 1=Again, 3=Good, 4=Easy
             "user_action":  req.user_action,
             "marked_easy":  req.marked_easy,
+            "revealed":     req.reveal,        # True → user pressed "Показать ответ"
         },
         "card":  answer_view,
         "next":  next_card,

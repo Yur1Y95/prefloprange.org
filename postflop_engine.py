@@ -132,29 +132,76 @@ def generate_spot(villain_type: str | None = None,
     }
 
 
+def _combo_notation(combo) -> str:
+    """Collapse a concrete 2-card combo back to range notation:
+    (14,1),(14,2) -> 'AA';  (14,1),(13,1) -> 'AKs';  (14,1),(13,2) -> 'AKo'."""
+    (r1, s1), (r2, s2) = combo
+    rc = equity.RANK_TO_CHAR
+    if r1 == r2:
+        return rc[r1] + rc[r2]                       # pocket pair
+    hi, lo = (r1, r2) if r1 > r2 else (r2, r1)
+    return rc[hi] + rc[lo] + ("s" if s1 == s2 else "o")
+
+
+# Max distinct hands listed per category tooltip before truncating.
+_HANDS_CAP = 28
+
+
+def _notation_sort_key(notation: str):
+    """Sort hands strong->weak: by high rank, then low rank, suited first."""
+    rch = equity.RANK_CHARS
+    hi = rch[notation[0]]
+    lo = rch[notation[1]]
+    suited = 0 if (len(notation) == 3 and notation[2] == "o") else 1
+    return (-hi, -lo, -suited)
+
+
+def _format_hands(counter) -> str:
+    """'AKo·9, AQo·6, …' sorted by combo count desc then hand strength."""
+    items = sorted(counter.items(),
+                   key=lambda kv: (-kv[1], _notation_sort_key(kv[0])))
+    shown = items[:_HANDS_CAP]
+    parts = [f"{hand}·{n}" for hand, n in shown]
+    extra = len(items) - len(shown)
+    if extra > 0:
+        parts.append(f"+{extra} more")
+    return ", ".join(parts)
+
+
 def _breakdown(combos, board):
     """Aggregate hand_classify over a list of 2-card combos.
-    Returns made-hand counts and draw counts as percentages."""
+    Returns made-hand counts and draw counts as percentages, each with a
+    `hands` string (notation·combos) for the hover tooltip."""
     import hand_classify
+    from collections import Counter
     made = {}
     draws = {}
+    made_hands = {}   # label -> Counter(notation -> combos)
+    draw_hands = {}
     total = 0
     for c in combos:
         cstr = equity.card_str(c[0]) + equity.card_str(c[1])
         r = hand_classify.classify(cstr, board)
-        made[r["made"]] = made.get(r["made"], 0) + 1
+        note = _combo_notation(c)
+        ml = r["made"]
+        made[ml] = made.get(ml, 0) + 1
+        made_hands.setdefault(ml, Counter())[note] += 1
         for d in r["draws"]:
             draws[d] = draws.get(d, 0) + 1
+            draw_hands.setdefault(d, Counter())[note] += 1
         total += 1
     if total == 0:
         return {"made": [], "draws": [], "total": 0}
 
-    def pack(d):
+    def pack(d, hands_map):
         items = sorted(d.items(), key=lambda kv: -kv[1])
         return [{"label": k, "combos": v,
-                 "pct": round(v / total * 100, 1)} for k, v in items]
+                 "pct": round(v / total * 100, 1),
+                 "hands": _format_hands(hands_map.get(k, Counter()))}
+                for k, v in items]
 
-    return {"made": pack(made), "draws": pack(draws), "total": total}
+    return {"made": pack(made, made_hands),
+            "draws": pack(draws, draw_hands), "total": total}
 
 
 def _legal_villain_combos(villain_range, hero, board):

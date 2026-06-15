@@ -31,17 +31,33 @@ function chipMakeChange(amount) {
 }
 function chipFmt(a) { return Number.isInteger(a) ? String(a) : a.toFixed(1); }
 
+// Chip scale, ported from the GG/PokerLay method (docs/design.md §7): size is
+// proportional to the live table, measured off a reference width, with a floor
+// so chips never vanish on tiny screens. GG uses a portrait 1080×1920 client as
+// its reference; our table is the landscape stadium, so the reference is its
+// desktop width (680px). At our mobile minimum (~560px) this yields ~0.82 —
+// exactly the old hand-tuned `scale(.82)` mobile hack, now made continuous.
+const CHIP_REF_W = 680;   // reference table width (desktop) → scale 1
+const CHIP_SCALE_MIN = 0.6;
+function chipScaleFor(tableWidth) {
+  const w = tableWidth || CHIP_REF_W;
+  return Math.max(CHIP_SCALE_MIN, Math.min(1, w / CHIP_REF_W));
+}
+
 // A column of discs from a denom list (bottom→top = largest→smallest).
-function chipColumn(denoms) {
+// `scale` (default 1) sizes the stack; CSS reads it back via the --cs var the
+// wrappers set, so disc size and stacking offset stay in lockstep.
+function chipColumn(denoms, scale) {
+  const s = scale || 1;
   const n = denoms.length;
   const coins = document.createElement('div');
   coins.className = 'coins';
-  coins.style.width  = CHIP_W + 'px';
-  coins.style.height = (CHIP_H + (n - 1) * CHIP_T) + 'px';
+  coins.style.width  = (CHIP_W * s) + 'px';
+  coins.style.height = ((CHIP_H + (n - 1) * CHIP_T) * s) + 'px';
   denoms.forEach((d, i) => {
     const coin = document.createElement('div');
     coin.className = 'coin ' + d.cls + (i === n - 1 ? ' top' : '');
-    coin.style.bottom = (i * CHIP_T) + 'px';
+    coin.style.bottom = (i * CHIP_T * s) + 'px';
     coin.style.zIndex = i;
     coin.style.setProperty('--rot', (i * 23 % 60) + 'deg');  // stagger edge spots
     if (i === n - 1) coin.setAttribute('data-d', d.label);
@@ -52,11 +68,13 @@ function chipColumn(denoms) {
 
 // Player bet: one mixed stack + amount pill. Returns a .chip-stack element
 // (CSS: position:absolute + translate(-50%,-50%)); caller sets top/left.
-function chipBetStack(amount) {
+function chipBetStack(amount, scale) {
+  const s = scale || 1;
   const a = parseFloat(amount);
   const wrap = document.createElement('div');
   wrap.className = 'chip-stack';
-  wrap.appendChild(chipColumn(chipMakeChange(a)));
+  wrap.style.setProperty('--cs', s);   // CSS sizes disc + font off this
+  wrap.appendChild(chipColumn(chipMakeChange(a), s));
   const amt = document.createElement('div');
   amt.className = 'chip-amt';
   amt.textContent = chipFmt(a);
@@ -66,7 +84,8 @@ function chipBetStack(amount) {
 
 // Pot: group make-change by denomination → one stack each, side by side.
 // Returns a .chip-pot element; caller sets top/left.
-function chipPotStacks(amount) {
+function chipPotStacks(amount, scale) {
+  const s = scale || 1;
   const groups = [];
   chipMakeChange(parseFloat(amount)).forEach(d => {
     const g = groups.find(x => x.cls === d.cls);
@@ -74,9 +93,10 @@ function chipPotStacks(amount) {
   });
   const wrap = document.createElement('div');
   wrap.className = 'chip-pot';
+  wrap.style.setProperty('--cs', s);
   const row = document.createElement('div');
   row.className = 'pot-row';
-  groups.forEach(g => row.appendChild(chipColumn(Array.from({ length: g.count }, () => g))));
+  groups.forEach(g => row.appendChild(chipColumn(Array.from({ length: g.count }, () => g), s)));
   wrap.appendChild(row);
   return wrap;
 }

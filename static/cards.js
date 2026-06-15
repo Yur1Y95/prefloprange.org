@@ -21,7 +21,7 @@ function cardSvgUrl(str) {
   const suit    = _CARD_SUIT_UNICODE[last] || _CARD_SUIT_LETTER[last.toLowerCase()];
   if (!suit || !rankRaw) return null;
   const rank    = _CARD_RANK[rankRaw.toUpperCase()] || rankRaw;  // 2..9 stay as-is
-  return `/cards/${suit}${rank}.svg`;
+  return `/cards/${suit}${rank}.svg?v=20260614c`;  // cache-bust: embossed-tile + club union fix
 }
 
 // Render an SVG card face into ``el``. Returns true on success so callers can

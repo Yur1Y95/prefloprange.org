@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260603b">
+  <link rel="stylesheet" href="/static/style.css?v=20260615b">
 </head>
 <body>
 
@@ -74,6 +74,8 @@
           <button class="seg active" data-espot="RFI">RFI</button>
           <button class="seg" data-espot="vs_RFI">vs RFI</button>
           <button class="seg" data-espot="vs_3bet">vs 3-Bet</button>
+          <button class="seg" data-espot="vs_4bet">vs 4-Bet</button>
+          <button class="seg" data-espot="iso">ISO</button>
         </div>
       </div>
 
@@ -217,6 +219,8 @@
           <button class="seg active" data-vspot="RFI">RFI</button>
           <button class="seg" data-vspot="vs_RFI">vs RFI</button>
           <button class="seg" data-vspot="vs_3bet">vs 3-Bet</button>
+          <button class="seg" data-vspot="vs_4bet">vs 4-Bet</button>
+          <button class="seg" data-vspot="iso">ISO</button>
         </div>
       </div>
       <div class="control-group">
@@ -249,7 +253,7 @@
     <section class="viz-section">
       <div class="viz-topbar">
         <span class="viz-status" id="vizStatus">—</span>
-        <span class="viz-hover"  id="vizHover">Hover over a hand</span>
+        <span class="viz-hover"  id="vizHover">Hover a cell for the action breakdown</span>
       </div>
       <div class="matrix-wrap">
         <div class="matrix" id="matrix"></div>
@@ -305,6 +309,8 @@
           <button class="seg active" data-spot="RFI">RFI</button>
           <button class="seg" data-spot="vs_RFI">vs RFI</button>
           <button class="seg" data-spot="vs_3bet">vs 3-Bet</button>
+          <button class="seg" data-spot="vs_4bet">vs 4-Bet</button>
+          <button class="seg" data-spot="iso">ISO</button>
         </div>
       </div>
       <div class="control-group">
@@ -348,22 +354,22 @@
     <section class="table-section">
       <div class="spot-line" id="spotLine">RFI · UTG</div>
       <div class="table-wrap">
-        <div class="table-rim"></div>
-        <div class="table-felt">
+        <img class="table-bg" src="/static/table_art/table.png?v=20260615a" alt="">
+        <div class="table-area">
           <div class="action-log" id="actionLog"></div>
           <div class="pot-block">
-            <span class="pot-label">POT</span>
+            <span class="pot-label">Total Pot :</span>
             <span class="pot-value" id="potValue">1.5 BB</span>
           </div>
           <div class="drill-empty" id="drillEmpty" style="display:none"></div>
+          <div class="seats" id="seats"></div>
+          <svg class="timer-ring" id="timerRing" viewBox="0 0 648 298" preserveAspectRatio="none" style="display:none">
+            <rect x="2" y="2" width="644" height="294" rx="147" ry="147"
+                  fill="none" stroke="#c9a84c" stroke-width="4"
+                  stroke-dasharray="1624" stroke-dashoffset="0"
+                  id="timerArc" stroke-linecap="round"/>
+          </svg>
         </div>
-        <div class="seats" id="seats"></div>
-        <svg class="timer-ring" id="timerRing" viewBox="0 0 648 298" preserveAspectRatio="none" style="display:none">
-          <rect x="2" y="2" width="644" height="294" rx="147" ry="147"
-                fill="none" stroke="#c9a84c" stroke-width="4"
-                stroke-dasharray="1624" stroke-dashoffset="0"
-                id="timerArc" stroke-linecap="round"/>
-        </svg>
       </div>
       <div class="hero-cards" id="heroCards">
         <div class="card card-back" id="card1"></div>
@@ -420,9 +426,22 @@
             <button class="seg" data-lscope="RFI">RFI</button>
             <button class="seg" data-lscope="vs_RFI">vs RFI</button>
             <button class="seg" data-lscope="vs_3bet">vs 3-Bet</button>
+            <button class="seg" data-lscope="vs_4bet">vs 4-Bet</button>
+            <button class="seg" data-lscope="iso">ISO</button>
           </div>
           <div class="learn-scope-locked-hint" id="learnScopeLockedHint" style="display:none">
             Scope is fixed once the deck is initialized. Reset to change it.
+          </div>
+        </div>
+
+        <div class="learn-row" id="learnLimitRow">
+          <label class="learn-label">New cards / day</label>
+          <div class="seg-buttons" id="learnLimitBtns">
+            <button class="seg" data-llimit="10">10</button>
+            <button class="seg active" data-llimit="15">15</button>
+            <button class="seg" data-llimit="30">30</button>
+            <button class="seg" data-llimit="50">50</button>
+            <button class="seg" data-llimit="0">∞</button>
           </div>
         </div>
 
@@ -461,25 +480,24 @@
     <section id="learnCard" class="table-section" style="display:none">
       <div class="spot-line" id="learnSpotLine">— · —</div>
       <div class="table-wrap">
-        <div class="table-rim"></div>
-        <div class="table-felt">
+        <img class="table-bg" src="/static/table_art/table.png?v=20260615a" alt="">
+        <div class="table-area">
           <div class="pot-block">
-            <span class="pot-label">POT</span>
+            <span class="pot-label">Total Pot :</span>
             <span class="pot-value" id="learnPotValue">1.5 BB</span>
           </div>
+          <div class="seats" id="learnSeats"></div>
         </div>
-        <div class="seats" id="learnSeats"></div>
       </div>
       <div class="hero-cards" id="learnHeroCards">
         <div class="card card-back" id="learnCard1"></div>
         <div class="card card-back" id="learnCard2"></div>
       </div>
       <div class="action-bar" id="learnActionBar"></div>
-      <!-- Reveal strip: hidden until an action is answered. Shows the verdict,
-           an optional Easy button (correct answers only), and Next. -->
+      <!-- Reveal strip: hidden until an action is answered. Shows the verdict
+           and Next. (Easy button removed — see CLAUDE.md decision #6.) -->
       <div class="learn-feedback-strip" id="learnFeedbackStrip" style="display:none">
         <span class="lfb-verdict" id="lfbVerdict"></span>
-        <button class="learn-easy-btn" id="learnEasyBtn" style="display:none">Easy</button>
         <button class="learn-next-btn" id="learnNextBtn">Next →</button>
       </div>
       <div class="learn-card-footer">
@@ -509,8 +527,8 @@
             <div class="lc-label">Accuracy</div>
           </div>
           <div class="learn-counter">
-            <div class="lc-num" id="lsEasy">0</div>
-            <div class="lc-label">Easy</div>
+            <div class="lc-num" id="lsShown">0</div>
+            <div class="lc-label">Shown</div>
           </div>
         </div>
         <div class="learn-summary-note">
@@ -560,19 +578,19 @@
       <div class="spot-line" id="pfSpotLine">Postflop · Cash</div>
       <div id="pfVillainLine" style="font-size:11px;color:var(--text-mid);text-align:center;max-width:380px;line-height:1.4;margin-top:-6px;">—</div>
       <div class="table-wrap" style="margin-top:60px;">
-        <div class="table-rim"></div>
-        <div class="table-felt">
+        <img class="table-bg" src="/static/table_art/table.png?v=20260615a" alt="">
+        <div class="table-area">
           <div style="display:flex;flex-direction:column;align-items:center;gap:10px;z-index:3;">
             <div class="hero-cards" id="pfBoard"></div>
-            <div class="pot-block">
+            <div class="pot-block-pf">
               <span class="pot-label">POT</span>
               <span class="pot-value" id="pfPot">—</span>
               <span class="pot-label" style="margin-top:4px;">TO CALL</span>
               <span class="pot-value" style="font-size:14px;color:var(--text-mid);" id="pfToCall">—</span>
             </div>
           </div>
+          <div class="seats" id="pfSeats"></div>
         </div>
-        <div class="seats" id="pfSeats"></div>
       </div>
       <div class="hero-cards" id="pfHole"></div>
       <div class="action-bar" id="pfActionBar">
@@ -636,13 +654,14 @@
 
   <!-- Cache-bust query params: bump the `v=` value when you change any JS
        file so the browser fetches the new version instead of a stale copy. -->
-  <script src="/static/cards.js?v=20260529a"></script>
-  <script src="/static/chips.js?v=20260530c"></script>
-  <script src="/static/drill.js?v=20260530g"></script>
-  <script src="/static/postflop.js?v=20260530c"></script>
-  <script src="/static/visualizer.js?v=20260530a"></script>
-  <script src="/static/editor.js?v=20260530d"></script>
-  <script src="/static/learn.js?v=20260526f"></script>
+  <script src="/static/cards.js?v=20260614c"></script>
+  <script src="/static/chips.js?v=20260614b"></script>
+  <script src="/static/drill.js?v=20260614c"></script>
+  <script src="/static/postflop.js?v=20260601d"></script>
+  <script src="/static/matrix_tip.js?v=20260615b"></script>
+  <script src="/static/visualizer.js?v=20260615b"></script>
+  <script src="/static/editor.js?v=20260615b"></script>
+  <script src="/static/learn.js?v=20260615a"></script>
   <script src="/static/mobile.js?v=20260529b"></script>
 </body>
 </html>

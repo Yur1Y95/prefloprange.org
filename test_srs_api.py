@@ -152,6 +152,30 @@ def test_answer_wrong_action_resets():
     print("  PASS  folding AA UTG -> in_strategy=False, rating=Again")
 
 
+def test_answer_reveal_forces_again():
+    """'Показать ответ' (reveal=True): the user didn't know. Regardless of the
+    correct strategy this must grade AGAIN and flag revealed=True — an honest
+    'don't know' should never look like a correct guess."""
+    client.post("/api/srs/init", json={
+        "file": RANGE_FILE_NAME, "scope": ["RFI"], "force": True,
+    })
+    # AA UTG is a pure open — a real answer of "open" would be GOOD. With
+    # reveal=True we expect AGAIN anyway, and user_action is irrelevant.
+    r = client.post("/api/srs/answer", json={
+        "file": RANGE_FILE_NAME,
+        "card_id": "AA__UTG__RFI",
+        "reveal": True,
+    })
+    assert r.status_code == 200, r.text
+    g = r.json()["grading"]
+    assert g["in_strategy"] is False
+    assert g["rating"] == 1          # AGAIN
+    assert g["revealed"] is True
+    # The correct strategy is still revealed so the UI can show it
+    assert r.json()["card"]["correct_strategy"]["open"] == 1.0
+    print("  PASS  reveal=True on AA UTG -> AGAIN, revealed=True, answer disclosed")
+
+
 def test_answer_easy_flag_promotes_to_easy():
     client.post("/api/srs/init", json={
         "file": RANGE_FILE_NAME, "scope": ["RFI"], "force": True,

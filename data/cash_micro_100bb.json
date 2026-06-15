@@ -6,21 +6,128 @@
     "label": "Micro 100bb sample"
   },
   "config": {
-    "positions": ["UTG", "MP", "CO", "BTN", "SB", "BB"],
-    "rfi_positions": ["UTG", "MP", "CO", "BTN", "SB"],
+    "positions": [
+      "UTG",
+      "MP",
+      "CO",
+      "BTN",
+      "SB",
+      "BB"
+    ],
+    "rfi_positions": [
+      "UTG",
+      "MP",
+      "CO",
+      "BTN",
+      "SB"
+    ],
     "vs_rfi_options": {
-      "MP": ["UTG"],
-      "CO": ["UTG", "MP"],
-      "BTN": ["UTG", "MP", "CO"],
-      "SB": ["UTG", "MP", "CO", "BTN"],
-      "BB": ["UTG", "MP", "CO", "BTN", "SB"]
+      "MP": [
+        "UTG"
+      ],
+      "CO": [
+        "UTG",
+        "MP"
+      ],
+      "BTN": [
+        "UTG",
+        "MP",
+        "CO"
+      ],
+      "SB": [
+        "UTG",
+        "MP",
+        "CO",
+        "BTN"
+      ],
+      "BB": [
+        "UTG",
+        "MP",
+        "CO",
+        "BTN",
+        "SB"
+      ]
     },
     "vs_3bet_options": {
-      "UTG": ["MP", "CO", "BTN", "SB", "BB"],
-      "MP": ["CO", "BTN", "SB", "BB"],
-      "CO": ["BTN", "SB", "BB"],
-      "BTN": ["SB", "BB"],
-      "SB": ["BB"]
+      "UTG": [
+        "MP",
+        "CO",
+        "BTN",
+        "SB",
+        "BB"
+      ],
+      "MP": [
+        "CO",
+        "BTN",
+        "SB",
+        "BB"
+      ],
+      "CO": [
+        "BTN",
+        "SB",
+        "BB"
+      ],
+      "BTN": [
+        "SB",
+        "BB"
+      ],
+      "SB": [
+        "BB"
+      ]
+    },
+    "vs_4bet_options": {
+      "MP": [
+        "UTG"
+      ],
+      "CO": [
+        "UTG",
+        "MP"
+      ],
+      "BTN": [
+        "UTG",
+        "MP",
+        "CO"
+      ],
+      "SB": [
+        "UTG",
+        "MP",
+        "CO",
+        "BTN"
+      ],
+      "BB": [
+        "UTG",
+        "MP",
+        "CO",
+        "BTN",
+        "SB"
+      ]
+    },
+    "iso_options": {
+      "MP": [
+        "UTG"
+      ],
+      "CO": [
+        "UTG",
+        "MP"
+      ],
+      "BTN": [
+        "UTG",
+        "MP",
+        "CO"
+      ],
+      "SB": [
+        "UTG",
+        "MP",
+        "CO",
+        "BTN"
+      ],
+      "BB": [
+        "UTG",
+        "MP",
+        "CO",
+        "BTN",
+        "SB"
+      ]
     }
   },
   "ranges": {
@@ -73,41 +180,93 @@
     "vs_RFI": {
       "MP": {
         "vs_UTG": {
-          "QQ": { "fold": 0.1, "call": 0.2, "3bet": 0.7 },
-          "JJ": { "fold": 0.15, "call": 0.55, "3bet": 0.3 },
-          "AKo": { "fold": 0.05, "call": 0.65, "3bet": 0.3 }
+          "QQ": {
+            "fold": 0.1,
+            "call": 0.2,
+            "3bet": 0.7
+          },
+          "JJ": {
+            "fold": 0.15,
+            "call": 0.55,
+            "3bet": 0.3
+          },
+          "AKo": {
+            "fold": 0.05,
+            "call": 0.65,
+            "3bet": 0.3
+          }
         }
       },
       "CO": {
         "vs_UTG": {
-          "AJs": { "fold": 0.2, "call": 0.5, "3bet": 0.3 },
-          "KQs": { "fold": 0.25, "call": 0.6, "3bet": 0.15 }
+          "AJs": {
+            "fold": 0.2,
+            "call": 0.5,
+            "3bet": 0.3
+          },
+          "KQs": {
+            "fold": 0.25,
+            "call": 0.6,
+            "3bet": 0.15
+          }
         },
         "vs_MP": {
-          "TT": { "fold": 0.05, "call": 0.35, "3bet": 0.6 }
+          "TT": {
+            "fold": 0.05,
+            "call": 0.35,
+            "3bet": 0.6
+          }
         }
       },
       "BB": {
         "vs_SB": {
-          "QJo": { "fold": 0.4, "call": 0.45, "3bet": 0.15 }
+          "QJo": {
+            "fold": 0.4,
+            "call": 0.45,
+            "3bet": 0.15
+          }
         }
       }
     },
     "vs_3bet": {
       "UTG": {
         "vs_MP": {
-          "AKs": { "fold": 0.15, "call": 0.35, "4bet": 0.5 },
-          "QQ": { "fold": 0.05, "call": 0.25, "4bet": 0.7 }
+          "AKs": {
+            "fold": 0.15,
+            "call": 0.35,
+            "4bet": 0.5
+          },
+          "QQ": {
+            "fold": 0.05,
+            "call": 0.25,
+            "4bet": 0.7
+          }
         },
         "vs_CO": {
-          "JJ": { "fold": 0.2, "call": 0.5, "4bet": 0.3 }
+          "JJ": {
+            "fold": 0.2,
+            "call": 0.5,
+            "4bet": 0.3
+          }
         }
       },
       "BTN": {
         "vs_BB": {
-          "A4s": { "fold": 0.35, "call": 0.45, "4bet": 0.2 }
+          "A4s": {
+            "fold": 0.35,
+            "call": 0.45,
+            "4bet": 0.2
+          }
         }
       }
     }
+  },
+  "spots": {
+    "vs_4bet": {},
+    "iso": {}
+  },
+  "ev": {
+    "vs_4bet": {},
+    "iso": {}
   }
 }

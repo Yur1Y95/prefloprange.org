@@ -153,38 +153,106 @@
       }
     }
   
+    // ---- breakdown hover tooltip (shared single element) ----
+    let _tipEl = null;
+    function _ensureTip() {
+      if (!_tipEl) {
+        _tipEl = document.createElement('div');
+        _tipEl.className = 'pf-tip';
+        document.body.appendChild(_tipEl);
+      }
+      return _tipEl;
+    }
+    function showTip(e) {
+      const t = _ensureTip();
+      const row = e.currentTarget;
+      t.innerHTML =
+        `<div class="pf-tip-h">${row.dataset.tipLabel}</div>` +
+        `<div class="pf-tip-b">${row.dataset.tipHands}</div>`;
+      t.style.display = 'block';
+      moveTip(e);
+    }
+    function moveTip(e) {
+      if (!_tipEl) return;
+      // Anchor to the LEFT of the cursor — the panel sits on the right edge,
+      // so a right-anchored tip would clip off-screen.
+      const pad = 14;
+      const w = _tipEl.offsetWidth;
+      let x = e.clientX - w - pad;
+      if (x < 8) x = 8;
+      let y = e.clientY + pad;
+      const h = _tipEl.offsetHeight;
+      if (y + h > window.innerHeight - 8) y = window.innerHeight - h - 8;
+      _tipEl.style.left = x + 'px';
+      _tipEl.style.top = y + 'px';
+    }
+    function hideTip() {
+      if (_tipEl) _tipEl.style.display = 'none';
+    }
+
     function renderBreakdown(el, made, draws) {
       el.innerHTML = '';
-      const rows = [];
-      // made: either a single label (hero) or list of {label,combos,pct}
+      hideTip();
+
+      // Made hands are mutually exclusive and sum to 100% of the range.
+      // Draws OVERLAP made hands (a Top Pair can also be a Flush Draw), so
+      // they are tracked separately and rendered in their own group with a
+      // note \u2014 summing made + draws into one list overcounts past 100%
+      // (fixes P-005 / P-006).
+      const madeRows = [];
       if (Array.isArray(made)) {
-        made.forEach(m => rows.push([m.label, m.combos, m.pct, false]));
+        made.forEach(m => madeRows.push([m.label, m.combos, m.pct, m.hands]));
       } else if (made) {
-        rows.push([made, null, null, false]);
+        madeRows.push([made, null, null, null]);  // hero: single label, no pct
       }
       const dlist = Array.isArray(draws) ? draws : [];
-      dlist.forEach(d => {
-        if (typeof d === 'string') rows.push([d, null, null, true]);
-        else rows.push([d.label, d.combos, d.pct, true]);
-      });
-      if (rows.length === 0) {
+      const drawRows = dlist.map(d =>
+        (typeof d === 'string') ? [d, null, null, null]
+                                : [d.label, d.combos, d.pct, d.hands]);
+
+      if (madeRows.length === 0 && drawRows.length === 0) {
         el.innerHTML = '<div class="pf-break-empty">\u2014</div>';
         return;
       }
-      rows.forEach(([lbl, combos, pct, isDraw]) => {
+
+      function addRow(lbl, combos, pct, hands, isDraw) {
         const row = document.createElement('div');
-        row.className = 'pf-break-row' + (isDraw ? ' is-draw' : '');
+        // "Nothing" = air (no made hand, no pair). Flag it so the share of
+        // pure air in the range is visually obvious.
+        const isAir = !isDraw && lbl === 'Nothing';
+        row.className = 'pf-break-row'
+          + (isDraw ? ' is-draw' : '') + (isAir ? ' is-air' : '');
         const bar = pct != null
           ? `<div class="pf-bar" style="width:${Math.min(pct,100)}%"></div>`
           : '';
         const num = pct != null
           ? `<span class="pf-num">${combos} \u00b7 ${pct}%</span>`
           : '<span class="pf-num"></span>';
-        row.innerHTML =
-          bar +
-          `<span class="pf-lbl">${lbl}</span>` + num;
+        row.innerHTML = bar + `<span class="pf-lbl">${lbl}</span>` + num;
+        // Hover tooltip: which exact hands sit in this category.
+        if (hands) {
+          row.classList.add('has-tip');
+          row.dataset.tipLabel = lbl;
+          row.dataset.tipHands = hands;
+          row.addEventListener('mouseenter', showTip);
+          row.addEventListener('mousemove', moveTip);
+          row.addEventListener('mouseleave', hideTip);
+        }
         el.appendChild(row);
-      });
+      }
+
+      function addHead(text) {
+        const h = document.createElement('div');
+        h.className = 'pf-break-head';
+        h.textContent = text;
+        el.appendChild(h);
+      }
+
+      madeRows.forEach(([l, c, p, h]) => addRow(l, c, p, h, false));
+      if (drawRows.length) {
+        addHead('Draws \u00b7 overlap made hands, not part of 100%');
+        drawRows.forEach(([l, c, p, h]) => addRow(l, c, p, h, true));
+      }
     }
 
     function showVerdict(v) {

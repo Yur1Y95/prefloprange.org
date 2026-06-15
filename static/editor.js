@@ -502,9 +502,19 @@ function edBuildMatrix() {
       label.textContent = h;
       cell.appendChild(label);
 
-      cell.addEventListener('mouseenter', () => edShowHover(h));
       grid.appendChild(cell);
     }
+  }
+
+  // Action-frequency tooltip on hover (Track B.3) — same floating card as the
+  // Visualizer, replacing the old #editorHover text. The tip is pointer-events:none
+  // so paint clicks/drags are unaffected; #editorHover stays the static
+  // "Click or drag to paint" instruction. Resolver reads the live range per move.
+  if (window.MatrixTip) {
+    MatrixTip.attach(grid, cell => {
+      const range = edRangeKey() || {};
+      return { hand: cell.dataset.hand, value: range[cell.dataset.hand] };
+    });
   }
 }
 
@@ -571,27 +581,18 @@ function edRenderCell(hand) {
     fold:  '#1e2a22',   // = empty-cell base, so fold remainder blends in (no stripe)
   };
 
+  // Actions in display order; fold = remainder (filled by mtxSplitGradient).
+  // B.3: 1px divider between segments via the shared helper from visualizer.js.
   const actionOrder = ed.spot === 'vs_3bet'
-    ? ['4bet', 'call', 'fold']
+    ? ['4bet', 'call']
     : ed.spot === 'vs_RFI'
-    ? ['3bet', 'call', 'fold']
-    : ['open', 'call', 'fold'];  // RFI
+    ? ['3bet', 'call']
+    : ['open', 'call'];  // RFI
 
-  let cum = 0;
-  const stops = [];
-
-  for (const a of actionOrder) {
-    const f = value[a] || (a === 'fold'
-      ? Math.max(0, 1 - Object.values(value).reduce((s,v)=>s+v,0))
-      : 0);
-    if (f <= 0) continue;
-    stops.push(`${COLOR[a] || '#333'} ${Math.round(cum*100)}% ${Math.round((cum+f)*100)}%`);
-    cum += f;
-  }
-
-  cell.style.background = stops.length
-    ? `linear-gradient(to right, ${stops.join(', ')})`
-    : '#1e2a22';
+  const segs = actionOrder
+    .map(a => [COLOR[a] || '#333', value[a] || 0])
+    .filter(([, f]) => f > 0);
+  cell.style.background = mtxSplitGradient(segs, COLOR.fold);
   cell.style.color = '#fff';
 }
 
@@ -604,21 +605,10 @@ function edUpdateMatrix() {
 }
 
 // ── HOVER INFO ────────────────────────────────────────
-function edShowHover(hand) {
-  const el    = document.getElementById('editorHover');
-  const range = edRangeKey();
-  const value = range[hand];
-
-  if (!value || Object.keys(value).length === 0) {
-    el.textContent = `${hand}: empty — click to paint`;
-    return;
-  }
-
-  const parts = Object.entries(value)
-    .filter(([,f]) => f > 0)
-    .map(([a,f]) => `${a} ${Math.round(f*100)}%`);
-  el.textContent = `${hand}: ${parts.join(' / ')}`;
-}
+// Per-hand action frequencies now appear in the floating MatrixTip tooltip next to
+// the cursor (static/matrix_tip.js, wired in edBuildMatrix), not in the #editorHover
+// line — which stays as the static "Click or drag to paint" instruction.
+// (Track B.3, 2026-06-15)
 
 // ── STATS ─────────────────────────────────────────────
 const TOTAL_COMBOS = 1326;
@@ -651,7 +641,7 @@ function edUpdateFilename() {
 
 function _edBuildRangeData() {
   const cfg = edPosConfig();
-  return {
+  const out = {
     meta: {
       game_type:   ed.gameType,
       table_size:  ed.tableSize,
@@ -666,6 +656,9 @@ function _edBuildRangeData() {
     },
     spots: ed.ranges,
   };
+  // Carry the EV block through unchanged so resaving never wipes it.
+  if (ed.ev) out.ev = ed.ev;
+  return out;
 }
 
 /** Core save — persists to the server's data/ directory and animates the
@@ -942,6 +935,12 @@ function edApplyLoadedData(data, sourceKey) {
     vs_RFI: JSON.parse(JSON.stringify(spots.vs_RFI || {})),
     vs_3bet: JSON.parse(JSON.stringify(spots.vs_3bet || {})),
   };
+
+  // Preserve the optional top-level `ev` block verbatim (GTO EV per hand).
+  // The editor doesn't edit EV, but it must NOT drop it on save — otherwise
+  // resaving a pack wipes hours of hand-entered EV (this regressed once,
+  // see docs/problems.md). Carried through in _edBuildRangeData.
+  ed.ev = data.ev ? JSON.parse(JSON.stringify(data.ev)) : null;
 
   // ── 3. Reset spot / position to safe defaults ──────
   ed.spot = 'RFI';

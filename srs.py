@@ -14,6 +14,7 @@ debugging.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field, asdict
 from datetime import date, timedelta
@@ -196,7 +197,7 @@ def init_cards_from_spots(
     frequencies sum to 1 (the existing ``_make_card`` behaviour, unchanged).
     """
     if scope is None:
-        scope = ("RFI", "vs_RFI", "vs_3bet")
+        scope = ("RFI", "vs_RFI", "vs_3bet", "vs_4bet", "iso")
 
     cards: list[Card] = []
     all_hands = _all_169_hands() if fill_implicit_fold else ()
@@ -217,8 +218,9 @@ def init_cards_from_spots(
             if fill_implicit_fold:
                 _expand(position, "RFI", "", set(hands.keys()))
 
-    # vs_RFI and vs_3bet share the same nested shape
-    for spot_name in ("vs_RFI", "vs_3bet"):
+    # vs_RFI, vs_3bet, vs_4bet, iso all share the same nested shape:
+    #   hero_pos -> "vs_<villain>" -> hand -> strategy
+    for spot_name in ("vs_RFI", "vs_3bet", "vs_4bet", "iso"):
         if spot_name not in scope:
             continue
         for hero_pos, vs_dict in spots_data.get(spot_name, {}).items():
@@ -428,7 +430,16 @@ def get_due_cards(
         if c.last_seen == today_str and c.total_seen == 1
     )
     remaining_new_slots = max(0, new_limit - introduced_today)
-    new_cards = [c for c in cards if c.is_new()][:remaining_new_slots]
+    # Introduce new cards in a *stable shuffled* order, not deck/JSON order.
+    # Deck order is JSON order (pairs + top suited first), so a fixed daily cap
+    # would always surface the same top-of-range hands and bury the marginal,
+    # decision-heavy hands at the very end. Sorting by md5(card_id) gives a
+    # deterministic pseudo-random order: stable across runs and days (md5 is
+    # not salted, unlike the builtin hash()), independent of JSON order — so
+    # each day introduces a different slice spread across the whole range.
+    fresh = [c for c in cards if c.is_new()]
+    fresh.sort(key=lambda c: hashlib.md5(c.card_id.encode()).hexdigest())
+    new_cards = fresh[:remaining_new_slots]
 
     return due_reviews + new_cards
 

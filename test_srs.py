@@ -554,6 +554,31 @@ def test_due_per_day_limit_allows_partial_fill():
         f"15-5=10 slots remaining, got {len(new_in_due)}"
 
 
+def test_new_cards_introduced_in_stable_shuffled_order():
+    """New cards surface in a stable, shuffled order — not raw deck order.
+
+    Deck order is JSON order (pairs + top broadways first); a fixed daily cap
+    would always surface the same top-of-range hands. Sorting by md5(card_id)
+    gives a deterministic, JSON-order-independent shuffle so each day covers a
+    different slice of the range, identical across runs/days.
+    """
+    hands = ["AA", "KK", "QQ", "JJ", "TT", "99", "88", "77", "66", "55",
+             "44", "33", "22", "AKs", "AQs", "AJs", "ATs", "KQs", "KJs", "QJs"]
+    mk = lambda hs: [Card(hand=h, position="UTG", spot="RFI",
+                          correct_strategy={"open": 1.0, "fold": 0.0}) for h in hs]
+
+    order_fwd = [c.hand for c in srs.get_due_cards(mk(hands), today=TODAY, new_limit=15)]
+    order_rev = [c.hand for c in srs.get_due_cards(mk(list(reversed(hands))),
+                                                   today=TODAY, new_limit=15)]
+
+    # Stable + independent of input order: same 15 hands in the same order.
+    assert order_fwd == order_rev, "shuffle must not depend on deck/JSON order"
+    # Actually shuffled: not just the matrix-order prefix (pairs first).
+    assert order_fwd != hands[:15], "order should be shuffled, not raw deck order"
+    # Still respects the daily cap.
+    assert len(order_fwd) == 15
+
+
 def test_default_card_has_empty_strategy_not_none():
     """
     Card() without explicit correct_strategy gives an empty dict (via

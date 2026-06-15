@@ -57,18 +57,22 @@ RANGE_NO_EV = {
 }
 
 
-def make_drill_hand(hand, correct_action, gto_ev):
-    """Hand-built RFI drill payload, bypassing the random generator."""
+def make_drill_hand(hand, actions, gto_ev, spot="RFI"):
+    """Hand-built RFI drill payload, bypassing the random generator.
+
+    `actions` is the strategy dict ({} = hand not in range → implicit fold).
+    Grading is membership-based now (decision #8 amended), so the strategy —
+    not a pre-rolled correct_action — decides right/wrong.
+    """
     return {
-        "spot": "RFI",
+        "spot": spot,
         "hero_position": "UTG",
         "villain_position": None,
         "hand": hand,
         "card1": "A♠", "card2": "A♥",
-        "frequency": 1.0,
-        "actions": {"open": 1.0},
+        "frequency": actions.get("open", 0),
+        "actions": actions,
         "rng": 0,
-        "correct_action": correct_action,
         "available_actions": ["open", "fold"],
         "gto_ev": gto_ev,
     }
@@ -110,7 +114,7 @@ def test_generator_attaches_ev():
 
 def test_correct_open_with_ev():
     print("test_correct_open_with_ev")
-    dh = make_drill_hand("AA", "open", 2.31)
+    dh = make_drill_hand("AA", {"open": 1.0}, 2.31)
     r = check_answer(dh, "open")
     check("correct", r["correct"] is True)
     check("ev == 2.31", r["ev"] == 2.31)
@@ -119,7 +123,7 @@ def test_correct_open_with_ev():
 
 def test_correct_open_without_ev():
     print("test_correct_open_without_ev")
-    dh = make_drill_hand("KK", "open", None)
+    dh = make_drill_hand("KK", {"open": 1.0}, None)
     r = check_answer(dh, "open")
     check("correct", r["correct"] is True)
     check("ev is None", r["ev"] is None)
@@ -128,7 +132,8 @@ def test_correct_open_without_ev():
 
 def test_correct_fold_no_ev():
     print("test_correct_fold_no_ev")
-    dh = make_drill_hand("72o", "fold", None)
+    # 72o is not in the range at all -> actions {} -> implicit fold 100%.
+    dh = make_drill_hand("72o", {}, None)
     r = check_answer(dh, "fold")
     check("correct", r["correct"] is True)
     check("ev is None", r["ev"] is None)
@@ -137,28 +142,77 @@ def test_correct_fold_no_ev():
 
 def test_wrong_no_ev():
     print("test_wrong_no_ev")
-    # Should have opened AA (with EV), but folded -> wrong, no EV shown.
-    dh = make_drill_hand("AA", "open", 2.31)
+    # Should have opened AA (with EV), but folded -> wrong (fold not in strategy).
+    dh = make_drill_hand("AA", {"open": 1.0}, 2.31)
     r = check_answer(dh, "fold")
     check("not correct", r["correct"] is False)
     check("ev is None on wrong", r["ev"] is None)
     check("message names correct action",
           r["message"] == "Wrong — correct action: open.")
 
-    # Wrongly opened a fold hand -> wrong, no EV.
-    dh2 = make_drill_hand("72o", "fold", None)
+    # Wrongly opened a fold-only hand -> wrong, no EV.
+    dh2 = make_drill_hand("72o", {}, None)
     r2 = check_answer(dh2, "open")
     check("wrong open: not correct", r2["correct"] is False)
     check("wrong open: ev None", r2["ev"] is None)
     check("wrong open: message", r2["message"] == "Wrong — correct action: fold.")
 
 
+def test_mixed_hand_both_actions_correct():
+    """Core of decision #8 amendment: for 66 = {open: 0.27}, BOTH open and fold
+    are in-strategy and must grade as correct."""
+    print("test_mixed_hand_both_actions_correct")
+    dh = make_drill_hand("66", {"open": 0.27}, 0.42)
+
+    r_open = check_answer(dh, "open")
+    check("open is correct", r_open["correct"] is True)
+    check("open shows EV (mixed open)", r_open["ev"] == 0.42)
+    check("open message has mix", "Mix: open 27%, fold 73%" in r_open["message"])
+
+    r_fold = check_answer(dh, "fold")
+    check("fold is correct", r_fold["correct"] is True)
+    check("fold shows no EV", r_fold["ev"] is None)
+    check("fold message has mix", "Mix: open 27%, fold 73%" in r_fold["message"])
+
+
+def test_mixed_open_call_no_fold():
+    """SB-style open/call mix that sums to 1.0 -> folding it is WRONG."""
+    print("test_mixed_open_call_no_fold")
+    dh = make_drill_hand("66", {"open": 0.51, "call": 0.49}, None)
+    check("open correct", check_answer(dh, "open")["correct"] is True)
+    check("call correct", check_answer(dh, "call")["correct"] is True)
+    r_fold = check_answer(dh, "fold")
+    check("fold wrong (no implicit fold)", r_fold["correct"] is False)
+    check("fold wrong: main line is open", r_fold["correct_action"] == "open")
+
+
+def test_vs_spot_no_synthetic_ev():
+    """vs_RFI/vs_3bet must NOT invent EV. No `ev` data -> pill hidden (None),
+    not a synthetic constant. Real EV (if present) shows only on a correct
+    non-fold action."""
+    print("test_vs_spot_no_synthetic_ev")
+    base = {"spot": "vs_RFI", "hero_position": "BB", "villain_position": "BTN",
+            "hand": "KQs", "card1": "K♠", "card2": "Q♠",
+            "actions": {"call": 0.6, "3bet": 0.4},
+            "available_actions": ["3bet", "call", "fold"], "gto_ev": None}
+    r = check_answer(base, "call")
+    check("vs correct, no data -> ev None", r["correct"] is True and r["ev"] is None)
+    r2 = check_answer(base, "fold")
+    check("vs wrong fold -> ev None (no synthetic -0.35)", r2["correct"] is False and r2["ev"] is None)
+    # With real EV present, a correct non-fold action surfaces it.
+    withev = dict(base, gto_ev=1.2)
+    check("vs correct 3bet shows real EV", check_answer(withev, "3bet")["ev"] == 1.2)
+    check("vs correct fold hides EV even with data", check_answer(withev, "fold")["ev"] is None)
+
+
 def test_timeout_unchanged():
     print("test_timeout_unchanged")
-    dh = make_drill_hand("AA", "open", 2.31)
+    dh = make_drill_hand("AA", {"open": 1.0}, 2.31)
     r = check_answer(dh, "fold", is_timeout=True)
     check("timeout not correct", r["correct"] is False)
     check("timeout flagged", r["is_timeout"] is True)
+    check("timeout no synthetic EV", r["ev"] is None)
+    check("timeout names main line", "open" in r["message"])
 
 
 if __name__ == "__main__":
@@ -168,6 +222,9 @@ if __name__ == "__main__":
     test_correct_open_without_ev()
     test_correct_fold_no_ev()
     test_wrong_no_ev()
+    test_mixed_hand_both_actions_correct()
+    test_mixed_open_call_no_fold()
+    test_vs_spot_no_synthetic_ev()
     test_timeout_unchanged()
     print(f"\n{_passed} passed, {_failed} failed")
     raise SystemExit(1 if _failed else 0)

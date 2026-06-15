@@ -112,6 +112,94 @@
       "SB": [
         "BB"
       ]
+    },
+    "vs_4bet_options": {
+      "UTG+1": [
+        "UTG"
+      ],
+      "MP": [
+        "UTG",
+        "UTG+1"
+      ],
+      "HJ": [
+        "UTG",
+        "UTG+1",
+        "MP"
+      ],
+      "CO": [
+        "UTG",
+        "UTG+1",
+        "MP",
+        "HJ"
+      ],
+      "BTN": [
+        "UTG",
+        "UTG+1",
+        "MP",
+        "HJ",
+        "CO"
+      ],
+      "SB": [
+        "UTG",
+        "UTG+1",
+        "MP",
+        "HJ",
+        "CO",
+        "BTN"
+      ],
+      "BB": [
+        "UTG",
+        "UTG+1",
+        "MP",
+        "HJ",
+        "CO",
+        "BTN",
+        "SB"
+      ]
+    },
+    "iso_options": {
+      "UTG+1": [
+        "UTG"
+      ],
+      "MP": [
+        "UTG",
+        "UTG+1"
+      ],
+      "HJ": [
+        "UTG",
+        "UTG+1",
+        "MP"
+      ],
+      "CO": [
+        "UTG",
+        "UTG+1",
+        "MP",
+        "HJ"
+      ],
+      "BTN": [
+        "UTG",
+        "UTG+1",
+        "MP",
+        "HJ",
+        "CO"
+      ],
+      "SB": [
+        "UTG",
+        "UTG+1",
+        "MP",
+        "HJ",
+        "CO",
+        "BTN"
+      ],
+      "BB": [
+        "UTG",
+        "UTG+1",
+        "MP",
+        "HJ",
+        "CO",
+        "BTN",
+        "SB"
+      ]
     }
   },
   "spots": {
@@ -8032,6 +8120,12 @@
         }
       }
     },
-    "vs_3bet": {}
+    "vs_3bet": {},
+    "vs_4bet": {},
+    "iso": {}
+  },
+  "ev": {
+    "vs_4bet": {},
+    "iso": {}
   }
 }

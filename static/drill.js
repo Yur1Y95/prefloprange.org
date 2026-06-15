@@ -194,7 +194,7 @@ async function drillLoadConfig(filename) {
 
 function isPlainSpots(s) {
   return s && typeof s === 'object' && !Array.isArray(s)
-      && (s.RFI || s.vs_RFI || s.vs_3bet);
+      && (s.RFI || s.vs_RFI || s.vs_3bet || s.vs_4bet || s.iso);
 }
 
 function drillRenderFormatSelectors() {
@@ -390,7 +390,7 @@ function refreshSpotAvailability() {
     btn.disabled = !spotHasAnyData(btn.dataset.spot);
   });
   if (!spotHasAnyData(state.spot)) {
-    const firstOk = ['RFI', 'vs_RFI', 'vs_3bet'].find(spotHasAnyData);
+    const firstOk = ['RFI', 'vs_RFI', 'vs_3bet', 'vs_4bet', 'iso'].find(spotHasAnyData);
     if (firstOk && firstOk !== state.spot) {
       state.spot = firstOk;
       document.querySelectorAll('.seg[data-spot]').forEach(b =>
@@ -443,9 +443,11 @@ function renderVillainSection() {
   }
   group.style.display = 'flex';
 
-  const optMap = state.spot === 'vs_RFI'
-    ? state.config.vs_rfi_options
-    : (state.config.vs_3bet_options || {});
+  const _SPOT_CFG_KEY = {
+    vs_RFI: 'vs_rfi_options', vs_3bet: 'vs_3bet_options',
+    vs_4bet: 'vs_4bet_options', iso: 'iso_options',
+  };
+  const optMap = state.config[_SPOT_CFG_KEY[state.spot]] || {};
   const available = optMap[state.heroPos] || [];
 
   // Prefer a villain that actually has data; fall back to config order.
@@ -506,9 +508,17 @@ function foldedSetForSpot(positions, heroPos, spot, villainPos) {
   const heroIdx = positions.indexOf(heroPos);
   if (heroIdx < 0) return folded;
 
-  if (spot === 'vs_3bet') {
+  if (spot === 'vs_3bet' || spot === 'vs_4bet') {
+    // Everyone except hero and villain has folded (heads-up re-raise war).
     positions.forEach(p => {
       if (p !== heroPos && p !== villainPos) folded.add(p);
+    });
+  } else if (spot === 'iso') {
+    // villain = limper (live); seats before hero except the limper folded.
+    // Seats after hero (SB, BB) haven't acted yet → still live.
+    const villainIdx = positions.indexOf(villainPos);
+    positions.forEach((p, i) => {
+      if (i < heroIdx && p !== villainPos) folded.add(p);
     });
   } else {
     // RFI and vs_RFI: only seats acting before hero can have folded so far.
@@ -590,42 +600,77 @@ function renderSeatsInto(spec) {
 
 // Chip helpers (chipBetStack, chipMakeChange, …) live in chips.js, loaded
 // before this file — shared with postflop.js (single source of truth).
+//
+// renderChips is the drill entry point (pulls hero/positions from drill state).
+// renderChipsInto is the parameterized engine underneath: learn.js reuses it so
+// Learn Mode draws the same posted blinds / raiser chips on ITS own table without
+// dragging in drill's state. Mirrors the renderSeats→renderSeatsInto and
+// renderCards→renderCardsInto split.
 function renderChips(context) {
-  document.querySelectorAll('.chip-stack, .chip-pot').forEach(c => c.remove());
+  renderChipsInto({
+    seatsId:   'seats',
+    positions: getPositions(),
+    heroPos:   state.heroPos,
+    context:   context,
+  });
+}
+
+function renderChipsInto(spec) {
+  // Scope to THIS table's felt overlay (the .table-area that holds spec.seatsId)
+  // so Drill and Learn chips never clash — there are multiple .table-area in the
+  // DOM. Fall back to the first one only if the seats element isn't found yet.
+  const seatsEl   = document.getElementById(spec.seatsId);
+  const tableArea = (seatsEl && seatsEl.closest('.table-area'))
+                 || document.querySelector('.table-area')
+                 || document.querySelector('.table-wrap');
+  if (!tableArea) return;
+  tableArea.querySelectorAll('.chip-stack, .chip-pot').forEach(c => c.remove());
+
+  const context = spec.context;
   if (!context) return;
 
-  const tableWrap = document.querySelector('.table-wrap');
-  // Measure the live table so chips track it when scaled down on mobile.
-  // SLOT_CHIP offsets were tuned for the 680x330 desktop table, so we scale
-  // those px nudges by the same factor. On desktop rect == 680x330 → scale 1.
-  const rect = tableWrap.getBoundingClientRect();
-  const W = rect.width  || 680;
-  const H = rect.height || 330;
-  const sx = W / 680, sy = H / 330;
-  const { pos: slotArr, chip: chipArr } = getSlotArrays();
+  const positions = spec.positions || getPositions();
+  const n         = positions.length;
+  const heroIdx   = positions.indexOf(spec.heroPos);
+  const slotArr   = SLOT_POS[n]  || SLOT_POS[6];
+  const chipArr   = SLOT_CHIP[n] || SLOT_CHIP[6];
 
+  // Measure the live felt area so chips scale with the table on mobile.
+  // Desktop felt area ≈ 616×308px (90.67% × 79.07% of the 680-wide table image).
+  // sx/sy = 1 at desktop size, < 1 on narrower viewports.
+  const rect = tableArea.getBoundingClientRect();
+  const W = rect.width  || 616;
+  const H = rect.height || 308;
+  const sx = W / 616, sy = H / 308;
+  // Chip size scales with the table too (GG method, chips.js / docs/design.md §7).
+  const cs = chipScaleFor(W);
+
+  // Slot for a position relative to THIS spec's hero (not drill module state).
+  function slotFor(pos) {
+    return (heroIdx - positions.indexOf(pos) + n) % n;
+  }
   // Place a bet stack on the open felt in front of `pos`.
   function addBet(pos, amount) {
-    const slot = slotForPos(pos);
+    if (!amount) return;
+    const slot = slotFor(pos);
     const sp   = slotArr[slot] || { top: '50%', left: '50%' };
     const off  = chipArr[slot] || [0, 0];
-    const stack = chipBetStack(amount);
+    const stack = chipBetStack(amount, cs);
     stack.style.top  = (parseFloat(sp.top)  / 100 * H + off[1] * sy) + 'px';
     stack.style.left = (parseFloat(sp.left) / 100 * W + off[0] * sx) + 'px';
-    tableWrap.appendChild(stack);
+    tableArea.appendChild(stack);
   }
 
-  // Preflop: money is still IN FRONT of players (blinds + open + 3bet) — it
+  // Preflop: money is still IN FRONT of players (blinds + open + 3bet/4bet) — it
   // hasn't been collected into a central pot yet, so we do NOT also draw pot
   // chips in the middle (that would double-count the blinds). The pot SIZE is
   // shown by the .pot-block text. Centre chip stacks belong to postflop, where
   // previous-street bets are actually gathered into the pot.
   addBet('SB', 0.5);
   addBet('BB', 1);
-  if (context.open_raiser && context.open_size)
-    addBet(context.open_raiser, context.open_size);
-  if (context.threebet_raiser && context.threebet_size)
-    addBet(context.threebet_raiser, context.threebet_size);
+  if (context.open_raiser     && context.open_size)     addBet(context.open_raiser,     context.open_size);
+  if (context.threebet_raiser && context.threebet_size) addBet(context.threebet_raiser, context.threebet_size);
+  if (context.fourbet_raiser  && context.fourbet_size)  addBet(context.fourbet_raiser,  context.fourbet_size);
 }
 
 // ── CARDS ─────────────────────────────────────────────
@@ -677,7 +722,7 @@ function renderCardsInto(card1, card2, c1Id, c2Id) {
 function renderActionButtons(actions) {
   const bar = document.getElementById('actionBar');
   bar.innerHTML = '';
-  const labels = { open: 'Open', fold: 'Fold', call: 'Call', '3bet': '3-Bet', '4bet': '4-Bet' };
+  const labels = { open: 'Open', fold: 'Fold', call: 'Call', '3bet': '3-Bet', '4bet': '4-Bet', allin: 'All-In', raise: 'Raise' };
   actions.forEach(action => {
     const btn = document.createElement('button');
     btn.className = `action-btn btn-${action}`;
@@ -966,6 +1011,22 @@ function showHint() {
     ].map(([bg, label]) =>
       `<div class="hint-legend-item"><div class="hint-legend-swatch" style="background:${bg}"></div>${label}</div>`
     ).join('');
+  } else if (dh.spot === 'vs_4bet') {
+    legend.innerHTML = [
+      ['#7b1fa2', 'All-In (5bet)'],
+      ['#3F7FB5', 'Call'],
+      ['#1e2a22;border:1px solid #2a3a2a', 'Fold'],
+    ].map(([bg, label]) =>
+      `<div class="hint-legend-item"><div class="hint-legend-swatch" style="background:${bg}"></div>${label}</div>`
+    ).join('');
+  } else if (dh.spot === 'iso') {
+    legend.innerHTML = [
+      ['#2E7D32', 'Raise (ISO)'],
+      ['#3F7FB5', 'Call (limp)'],
+      ['#1e2a22;border:1px solid #2a3a2a', 'Fold'],
+    ].map(([bg, label]) =>
+      `<div class="hint-legend-item"><div class="hint-legend-swatch" style="background:${bg}"></div>${label}</div>`
+    ).join('');
   } else {
     const isVs3bet = dh.spot === 'vs_3bet';
     legend.innerHTML = [
@@ -1053,6 +1114,12 @@ function getHintRange() {
   if (dh.spot === 'vs_3bet') {
     return { range: _hintExpandActions(spots.vs_3bet?.[dh.hero_position]?.[key] || {}), type: 'vs' };
   }
+  if (dh.spot === 'vs_4bet') {
+    return { range: _hintExpandActions(spots.vs_4bet?.[dh.hero_position]?.[key] || {}), type: 'vs_4bet' };
+  }
+  if (dh.spot === 'iso') {
+    return { range: _hintExpandActions(spots.iso?.[dh.hero_position]?.[key] || {}), type: 'iso' };
+  }
   return { range: {}, type: 'RFI' };
 }
 
@@ -1072,6 +1139,14 @@ function colorHintCell(cell, value, type, spot) {
       cell.style.background = _hintGradient(value, { open:'#2E7D32', call:'#3F7FB5', fold:'#1e2a22' }, ['open','call','fold']);
       cell.style.color      = '#fff';
     }
+  } else if (type === 'vs_4bet') {
+    const colors = { allin:'#7b1fa2', call:'#3F7FB5', fold:'#1e2a22' };
+    cell.style.background = _hintGradient(value, colors, ['allin','call','fold']);
+    cell.style.color      = '#fff';
+  } else if (type === 'iso') {
+    const colors = { raise:'#2E7D32', call:'#3F7FB5', fold:'#1e2a22' };
+    cell.style.background = _hintGradient(value, colors, ['raise','call','fold']);
+    cell.style.color      = '#fff';
   } else {
     const colors = { '3bet':'#F44336', call:'#3F7FB5', '4bet':'#c0392b', fold:'#1e2a22' };
     const order  = spot === 'vs_3bet' ? ['4bet','call','fold'] : ['3bet','call','fold'];

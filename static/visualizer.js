@@ -124,9 +124,18 @@ function buildMatrix() {
       label.textContent = hand;
       cell.appendChild(label);
 
-      cell.addEventListener('mouseenter', () => vizShowHover(hand));
       grid.appendChild(cell);
     }
+  }
+
+  // Action-frequency tooltip on hover (Track B.3) — replaces the old #vizHover
+  // frequency line. The resolver reads the live cached range on every move, so
+  // recolors/rebuilds need no extra wiring. Attaches once (guarded in MatrixTip).
+  if (window.MatrixTip) {
+    MatrixTip.attach(grid, cell => ({
+      hand:  cell.dataset.hand,
+      value: viz.cachedRange ? viz.cachedRange[cell.dataset.hand] : null,
+    }));
   }
 }
 
@@ -443,6 +452,30 @@ function renderMatrix(range, type) {
   });
 }
 
+// Build a left-to-right split-bar gradient with a crisp ~1px dark divider
+// between adjacent segments (B.3 variant C). `segs` = ordered [color, fraction]
+// pairs; the remainder (<1) is filled with `foldColor`. Shared by the Visualizer
+// and Editor matrices (editor.js loads after this file). Drill's hint grid keeps
+// its own gradient builder. Palette unchanged — see design.md §9.1.
+function mtxSplitGradient(segs, foldColor) {
+  const DIV = '#0b0f0d';
+  let cum = 0;
+  const stops = [];
+  for (const [color, fr] of segs) {
+    if (!fr || fr <= 0) continue;
+    const p1 = cum * 100, p2 = (cum + fr) * 100;
+    if (cum > 0) stops.push(`${DIV} ${p1.toFixed(1)}% ${(p1 + 0.8).toFixed(1)}%`);
+    stops.push(`${color} ${(cum > 0 ? p1 + 0.8 : p1).toFixed(1)}% ${p2.toFixed(1)}%`);
+    cum += fr;
+  }
+  if (cum < 1) {
+    const p = cum * 100;
+    if (cum > 0) stops.push(`${DIV} ${p.toFixed(1)}% ${(p + 0.8).toFixed(1)}%`);
+    stops.push(`${foldColor} ${(cum > 0 ? p + 0.8 : 0).toFixed(1)}% 100%`);
+  }
+  return stops.length ? `linear-gradient(to right, ${stops.join(', ')})` : foldColor;
+}
+
 function paintRFI(cell, hand, value) {
   // value is either a number (old format) or {action: freq} (new format)
   const isMulti = typeof value === 'object' && value !== null;
@@ -464,24 +497,11 @@ function paintRFI(cell, hand, value) {
     return;
   }
 
-  // Multi-action: open=green, call=blue, fold=empty-cell base (no distinct stripe)
+  // Multi-action: open=green, call=blue; fold remainder = empty-cell base.
+  // B.3: 1px divider between segments via the shared mtxSplitGradient helper.
   const COLOR = { open: '#2E7D32', call: '#3F7FB5', fold: '#1e2a22' };
-  const ORDER = ['open', 'call', 'fold'];
-  let cum = 0;
-  const stops = [];
-
-  for (const a of ORDER) {
-    const f = value[a] || (a === 'fold'
-      ? Math.max(0, 1 - Object.values(value).reduce((s,v)=>s+v,0))
-      : 0);
-    if (f <= 0) continue;
-    stops.push(`${COLOR[a]} ${Math.round(cum*100)}% ${Math.round((cum+f)*100)}%`);
-    cum += f;
-  }
-
-  cell.style.background = stops.length
-    ? `linear-gradient(to right, ${stops.join(', ')})`
-    : '#1e2a22';
+  const segs = [[COLOR.open, value.open || 0], [COLOR.call, value.call || 0]];
+  cell.style.background = mtxSplitGradient(segs, COLOR.fold);
   cell.style.color   = '#fff';
   cell.style.opacity = '1';
 }
@@ -510,29 +530,12 @@ function paintActions(cell, hand, actions) {
     if (!rngChosen) rngChosen = 'fold';
   }
 
-  // Build CSS gradient segments
+  // Build CSS gradient segments (B.3: 1px divider via shared mtxSplitGradient).
   const COLOR = { '3bet': '#F44336', '4bet': '#c0392b', call: '#3F7FB5', fold: '#1e2a22' };
-  let cum = 0;
-  const stops = [];
-
-  for (const a of [...actionKeys, 'fold']) {
-    const f = filteredActions[a] !== undefined
-      ? filteredActions[a]
-      : (a === 'fold' ? Math.max(0, 1 - Object.values(filteredActions).reduce((s,v)=>s+v,0)) : 0);
-    if (f <= 0) continue;
-    const pct1 = Math.round(cum * 100);
-    const pct2 = Math.round((cum + f) * 100);
-    stops.push(`${COLOR[a]} ${pct1}% ${pct2}%`);
-    cum += f;
-  }
-  // Fill remainder as fold
-  if (cum < 1) {
-    stops.push(`${COLOR.fold} ${Math.round(cum*100)}% 100%`);
-  }
-
-  cell.style.background = stops.length > 0
-    ? `linear-gradient(to right, ${stops.join(', ')})`
-    : COLOR.fold;
+  const segs = actionKeys
+    .map(a => [COLOR[a], filteredActions[a] || 0])
+    .filter(([, f]) => f > 0);
+  cell.style.background = mtxSplitGradient(segs, COLOR.fold);
 
   // RNG highlight: dim non-chosen
   if (viz.rngEnabled && rngChosen) {
@@ -547,58 +550,9 @@ function paintActions(cell, hand, actions) {
 }
 
 // ── HOVER INFO ────────────────────────────────────────
-function vizShowHover(hand) {
-  const el    = document.getElementById('vizHover');
-  const type  = viz.cachedType;
-  const range = viz.cachedRange;
-
-  if (type === 'RFI') {
-    const value = range[hand];
-    if (!value) { el.textContent = `${hand}: fold`; return; }
-
-    // Multi-action format (MTT with limp)
-    if (typeof value === 'object') {
-      const parts = Object.entries(value)
-        .filter(([,f]) => f > 0)
-        .map(([a,f]) => `${a} ${Math.round(f*100)}%`);
-      el.textContent = `${hand}: ${parts.join(' / ')}`;
-      return;
-    }
-
-    // Legacy single-frequency
-    const pct = Math.round(value * 100);
-    let rngInfo = '';
-    if (viz.rngEnabled) {
-      const rng  = viz.rngValues[hand] ?? 0;
-      const play = rng < pct;
-      rngInfo = ` · RNG ${rng} ${play ? '<' : '≥'} ${pct} → ${play ? 'open' : 'fold'}`;
-    }
-    el.textContent = `${hand}: open ${pct}%${rngInfo}`;
-
-  } else {
-    const actions = range[hand] || {};
-    if (!Object.keys(actions).length) {
-      el.textContent = `${hand}: fold 100%`;
-      return;
-    }
-    const parts = Object.entries(actions)
-      .filter(([,f]) => f > 0)
-      .map(([a,f]) => `${a} ${Math.round(f*100)}%`);
-
-    let rngInfo = '';
-    if (viz.rngEnabled) {
-      const rng = (viz.rngValues[hand] ?? 0) / 100;
-      const actionOrder = viz.spot === 'vs_3bet' ? ['4bet','call'] : ['3bet','call'];
-      let cum = 0, chosen = 'fold';
-      for (const a of actionOrder) {
-        cum += actions[a] || 0;
-        if (rng < cum) { chosen = a; break; }
-      }
-      rngInfo = ` · RNG → ${chosen}`;
-    }
-    el.textContent = `${hand}: ${parts.join(' / ')}${rngInfo}`;
-  }
-}
+// Per-hand action frequencies now appear in a floating tooltip next to the cursor
+// (static/matrix_tip.js, wired in buildMatrix) instead of the cramped #vizHover
+// line above the grid. The line stays as a static hint. (Track B.3, 2026-06-15)
 
 // ── STATUS BAR ────────────────────────────────────────
 function renderStatus(range, type) {

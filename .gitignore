@@ -19,8 +19,13 @@ Thumbs.db
 *.swp
 *.swo
 
-# Claude Code local overrides
-.claude/settings.local.json
+# Claude / Cowork session artifacts
+.claude/
+
+# Cowork plugin downloads
+*.skill
+dist/
+zi7EnBeQ
 
 # Local runtime artefacts — personal training data, keep out of git
 stats.json
@@ -29,3 +34,48 @@ history.json
 # Large hand-history data (too big for GitHub, kept local only)
 parsed/
 hand_history_archives/
+
+# GTOW parser backup snapshots (auto-created by gtow_parse.py --apply)
+data/*.bak
+
+# Table render intermediates
+static/_table_render/
+
+# Preview / scratch HTML files
+static/*_preview.html
+
+# Personal notes (not project code)
+daily_lessons/
+weekly-notes.md
+weekly-notes-archive/
+status-update-*.md
+
+# Lead research files (unrelated to poker trainer)
+docs/icp_and_pricing.md
+docs/lead_research.csv
+docs/lead_research.md
+
+# Personal SRS progress — per-pack training state (like stats.json/history.json)
+srs_state/
+
+# Personal planning notes (not project code)
+daily_plan/
+
+# Card deck backups & staging snapshots (auto-created, keep local)
+cards/_backup_*/
+cards/_tiles_*/
+cards/_preview_*
+
+# Smoke-test scratch packs/state
+data/_smoke_*
+
+# Stray AI-image exports
+Firefly_*.png
+
+# GTOW saved-page HTML dumps — bulky source HTML, kept local (parser reads them locally;
+# the parser, README, bookmarklet and _build_*.py reconstruction scripts stay tracked)
+tools/gtow_dumps/*.html
+tools/gtow_dumps/**/*.html
+
+# Table-art scratch (previews / verify renders); table.png + variants + render_table.py stay tracked
+static/table_art/_*
