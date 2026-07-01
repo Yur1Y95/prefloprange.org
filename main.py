@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -6,6 +6,7 @@ from typing import Optional
 from datetime import datetime
 import json
 import os
+import re
 import random as _random
 
 from range_engine import load_range_file
@@ -20,11 +21,21 @@ from drill_engine import (
 from postflop_api import router as postflop_router
 from equity_api import router as equity_router
 from srs_api import router as srs_router
+from db_api import router as db_router
+from auth_api import router as auth_router
+from dashboard_api import router as dashboard_router
+import db            # Track D, D.1-api-reads: detect DB mode (database_configured)
+import journal       # Track D, D.1-api-write: append each Drill answer to the journal
+import stats_store   # Track D, D.1-api-reads: read Stats/History from DB or JSON
+import auth          # Track D, D.2: resolve the request's user_id from its JWT
 
 app = FastAPI(title="NLH Range Trainer")
 app.include_router(postflop_router)
 app.include_router(equity_router)
 app.include_router(srs_router)
+app.include_router(db_router)  # Track D, D.1-api: /api/db/health
+app.include_router(auth_router)  # Track D, D.2: /api/auth/config
+app.include_router(dashboard_router)  # Track D, Stage 2: /api/dashboard/overview
 
 BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR     = os.path.join(BASE_DIR, "data")
@@ -35,11 +46,44 @@ HISTORY_FILE = os.path.join(BASE_DIR, "history.json")
 HISTORY_MAX  = 200
 
 
+def _range_sort_key(filename: str):
+    """Order range packs by NL stake (ascending); stake-less packs go last.
+
+    The dropdown in every tab (Drill / Learn / Visualizer / Editor) is built
+    verbatim from the order this returns, so sorting here fixes ordering
+    everywhere in one place.
+
+    Why not a plain string sort: ``"GTOWNL1000" < "GTOWNL200"`` lexicographically,
+    because strings compare char-by-char and ``'1' < '2'``. We pull the integer
+    stake out of the ``NL<digits>`` token and compare numerically instead, so the
+    list reads 10 -> 25 -> 50 -> 100 -> ... -> 10000.
+
+    Why not rename the files: a pack's file stem is its identity key for
+    ``srs_state/<stem>.srs.json`` and per-pack stats — renaming would orphan
+    saved SRS progress. Sorting touches none of that.
+
+    Returns ``(no_stake, stake, name)``:
+      * ``no_stake`` (0/1) pushes packs without an ``NL<digits>`` token
+        (``cash_*``, MTT depth packs) to the bottom;
+      * ``stake`` orders NL packs numerically;
+      * ``name`` breaks ties alphabetically (case-insensitive), e.g. two packs
+        at the same stake like ``GTOWNL10`` and ``WizardParseNL10``.
+
+    Note ``re.search`` requires digits right after ``NL``, so ``greenline`` (the
+    ``nl`` has no digit after it) and depth tokens like ``15bb`` are correctly
+    treated as stake-less.
+    """
+    m = re.search(r"NL(\d+)", filename, re.IGNORECASE)
+    if m:
+        return (0, int(m.group(1)), filename.lower())
+    return (1, 0, filename.lower())
+
+
 def _list_range_files() -> list:
     if not os.path.exists(DATA_DIR):
         return []
     files = []
-    for fn in sorted(os.listdir(DATA_DIR)):
+    for fn in sorted(os.listdir(DATA_DIR), key=_range_sort_key):
         if not fn.endswith(".json"):
             continue
         path = os.path.join(DATA_DIR, fn)
@@ -241,6 +285,15 @@ def get_drill_hand(
     range_data = _load_range(file)
     config = range_data["config"]
 
+    # Pack identity rides inside the returned drill_hand so it round-trips back
+    # to /api/drill/answer for the journal — the frontend echoes the whole hand
+    # verbatim, so no frontend change is needed. journal._stem() strips ".json".
+    pack_file = file or _list_range_files()[0]["filename"]
+
+    def _tag(result: dict) -> dict:
+        result["pack"] = pack_file
+        return result
+
     if random_hero:
         hero_position = random_hero_select(config, spot)
         if not hero_position:
@@ -257,7 +310,7 @@ def get_drill_hand(
         result = get_drill_hand_rfi(range_data, hero_position)
         if not result:
             raise HTTPException(status_code=404, detail=f"No RFI data for {hero_position} in this pack.")
-        return result
+        return _tag(result)
 
     if spot == "vs_RFI":
         if not villain_position:
@@ -265,7 +318,7 @@ def get_drill_hand(
         result = get_drill_hand_vs_rfi(range_data, hero_position, villain_position)
         if not result:
             raise HTTPException(status_code=404, detail=f"Range not found: {hero_position} vs {villain_position}.")
-        return result
+        return _tag(result)
 
     if spot == "vs_3bet":
         if not villain_position:
@@ -273,7 +326,7 @@ def get_drill_hand(
         result = get_drill_hand_vs_3bet(range_data, hero_position, villain_position)
         if not result:
             raise HTTPException(status_code=404, detail=f"Range not found: {hero_position} vs {villain_position}.")
-        return result
+        return _tag(result)
 
     if spot == "vs_4bet":
         if not villain_position:
@@ -281,7 +334,7 @@ def get_drill_hand(
         result = get_drill_hand_vs_4bet(range_data, hero_position, villain_position)
         if not result:
             raise HTTPException(status_code=404, detail=f"No vs_4bet data: {hero_position} vs {villain_position}.")
-        return result
+        return _tag(result)
 
     if spot == "iso":
         if not villain_position:
@@ -289,13 +342,13 @@ def get_drill_hand(
         result = get_drill_hand_iso(range_data, hero_position, villain_position)
         if not result:
             raise HTTPException(status_code=404, detail=f"No iso data: {hero_position} vs {villain_position}.")
-        return result
+        return _tag(result)
 
     raise HTTPException(status_code=400, detail=f"Unknown spot: {spot}")
 
 
 @app.post("/api/drill/answer")
-def submit_answer(request: AnswerRequest):
+def submit_answer(request: AnswerRequest, user=Depends(auth.get_current_user)):
     result = check_answer(request.drill_hand, request.player_action, request.is_timeout)
     dh = request.drill_hand
     stats_key = f"{dh.get('hero_position')}_vs_{dh.get('villain_position')}" if dh.get('villain_position') else dh.get('hero_position', '')
@@ -319,27 +372,51 @@ def submit_answer(request: AnswerRequest):
     }
     history.insert(0, entry)
     save_history(history)
+
+    # Track D, D.1-api-write: append this answer to the DB journal, in parallel
+    # with the JSON above. Best-effort and a no-op without DATABASE_URL, so the
+    # current prod (JSON-only) is unaffected. `dh` carries `pack`, stamped at
+    # /api/drill/hand time and echoed back by the frontend. `user` is the JWT
+    # subject in DB mode (D.2), or the dev user when auth is off.
+    journal.record_drill_answer(dh, result, user_id=user)
+
     return result
 
 
 @app.get("/api/stats")
-def get_stats():
-    return load_stats()
+def get_stats(user=Depends(auth.get_current_user)):
+    # Track D, D.1-api-reads: served from the `answers` journal when a database
+    # is configured, otherwise from stats.json (soft degradation). Drill-only.
+    # `user` (D.2): the JWT subject in DB mode, or the dev user when auth is off.
+    return stats_store.read_stats(STATS_FILE, user_id=user)
 
 
 @app.post("/api/stats/reset")
 def reset_stats():
+    # In DB mode `answers` is an append-only journal — never wipe it from here
+    # (it also holds Learn history and future FSRS-fit data). The frontend hides
+    # this button when the DB is configured; a real per-user "soft reset"
+    # (cutoff marker) belongs to the account/dashboard chat. JSON mode: reset the
+    # legacy file as before.
+    if db.database_configured():
+        return {"status": "noop", "reason": "stats are an append-only journal in DB mode"}
     save_stats(dict(_SPOT_DEFAULTS))
     return {"status": "reset"}
 
 
 @app.get("/api/history")
-def get_history(limit: int = Query(50)):
-    return load_history()[:limit]
+def get_history(limit: int = Query(50), user=Depends(auth.get_current_user)):
+    # Track D, D.1-api-reads: from the journal (newest first) in DB mode, else
+    # from history.json. stats_store clamps the limit.
+    return stats_store.read_history(HISTORY_FILE, limit, user_id=user)
 
 
 @app.post("/api/history/clear")
 def clear_history():
+    # Append-only journal in DB mode — see reset_stats above. JSON mode: clear
+    # the legacy file as before.
+    if db.database_configured():
+        return {"status": "noop", "reason": "history is an append-only journal in DB mode"}
     save_history([])
     return {"status": "cleared"}
 

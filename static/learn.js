@@ -11,7 +11,8 @@
 //             drill's feedback-strip.
 //   Stage 5 — end-of-session summary when queue_size hits 0.
 //
-// Answer options: the committed poker actions (fold/open/call/3bet/4bet) plus
+// Answer options: the committed poker actions (fold/open/call/3bet/4bet/allin/
+// raise — the aggressive name varies by spot) plus
 // "Показать ответ" — an honest "I don't know" that reveals the answer and
 // grades AGAIN, so a forced 50/50 guess can't register as correct. The old
 // Anki-style Easy button was removed (CLAUDE.md decision #6).
@@ -35,6 +36,7 @@
   const scopeBtns  = document.querySelectorAll('#learnScopeBtns [data-lscope]');
   const scopeLockedHint = document.getElementById('learnScopeLockedHint');
   const limitBtns  = document.querySelectorAll('#learnLimitBtns [data-llimit]');
+  const autoNextToggle = document.getElementById('learnAutoNextToggle');
   const counters   = document.getElementById('learnCounters');
   const startBtn   = document.getElementById('learnStartBtn');
   const resetBtn   = document.getElementById('learnResetBtn');
@@ -52,6 +54,7 @@
   const actionBar   = document.getElementById('learnActionBar');
   const queueBadge  = document.getElementById('learnQueueBadge');
   const backBtn     = document.getElementById('learnBackBtn');
+  const endBtn      = document.getElementById('learnEndBtn');
   // Reveal strip (shown after each answer, holds the verdict + Next)
   const feedbackStrip = document.getElementById('learnFeedbackStrip');
   const lfbVerdict    = document.getElementById('lfbVerdict');
@@ -67,12 +70,17 @@
     shown:    document.getElementById('lsShown'),
   };
 
+  // Auto-Next delay (ms): how long the verdict stays visible before auto-advancing.
+  const AUTO_NEXT_MS = 1000;
+
   // ── State ────────────────────────────────────────────────────────────────
   const state = {
     filesLoaded:    false,
     currentFile:    '',
     selectedScope:  'all',          // 'all' | 'RFI' | 'vs_RFI' | 'vs_3bet'
     newLimit:       15,             // new cards/day; 0 = unlimited (sent as a big number)
+    autoNext:       true,           // auto-advance to the next card after a normal answer
+    autoNextTimer:  null,           // pending setTimeout id for the auto-advance (so we can cancel it)
     initialized:    false,
     rangeConfigs:   {},             // file -> {positions: [...]} cache
     currentCard:    null,           // card payload from /api/srs/next
@@ -227,6 +235,23 @@
       state.newLimit = parseInt(btn.dataset.llimit, 10);
     });
   });
+
+  // ── Auto-Next toggle (lives on the card screen, flip during a session) ────
+  // Auto-advance to the next card after a normal answer. Off = old behaviour
+  // (manual "Дальше"). Button label + .is-on class reflect the state.
+  function renderAutoNextToggle() {
+    if (!autoNextToggle) return;
+    autoNextToggle.textContent = `Auto-Next: ${state.autoNext ? 'On' : 'Off'}`;
+    autoNextToggle.classList.toggle('is-on', state.autoNext);
+  }
+  if (autoNextToggle) {
+    autoNextToggle.addEventListener('click', () => {
+      state.autoNext = !state.autoNext;
+      if (!state.autoNext) clearAutoNext();   // turning it off cancels a pending advance
+      renderAutoNextToggle();
+    });
+    renderAutoNextToggle();
+  }
 
   // ── File dropdown changes ────────────────────────────────────────────────
   fileSelect.addEventListener('change', async () => {
@@ -390,6 +415,10 @@
       return `vs RFI · ${card.position} vs ${card.villain_position}`;
     if (card.spot === 'vs_3bet')
       return `vs 3-Bet · ${card.position} vs ${card.villain_position}`;
+    if (card.spot === 'vs_4bet')
+      return `vs 4-Bet · ${card.position} vs ${card.villain_position}`;
+    if (card.spot === 'iso')
+      return `ISO · ${card.position} vs ${card.villain_position}`;
     return card.spot;
   }
 
@@ -446,15 +475,20 @@
   }
 
   function actionsForSpot(spot) {
-    // Fold first, then the aggressive line, then passive call (where it exists)
+    // Fold first, then the aggressive line, then passive call (where it exists).
+    // Aggressive action name per spot mirrors the range JSON keys (CLAUDE.md):
+    // vs_4bet uses "allin" (Raise+Allin collapse), iso uses "raise".
     if (spot === 'RFI')      return ['fold', 'open'];
     if (spot === 'vs_RFI')   return ['fold', 'call', '3bet'];
     if (spot === 'vs_3bet')  return ['fold', 'call', '4bet'];
+    if (spot === 'vs_4bet')  return ['fold', 'call', 'allin'];
+    if (spot === 'iso')      return ['fold', 'call', 'raise'];
     return ['fold'];
   }
 
   const ACTION_LABELS = {
     fold: 'Fold', open: 'Open', call: 'Call', '3bet': '3-Bet', '4bet': '4-Bet',
+    allin: 'All-in', raise: 'Raise',
   };
 
   function renderActionButtons(spot) {
@@ -540,6 +574,15 @@
     }
     learnNextBtn.disabled = false;
     feedbackStrip.style.display = '';
+
+    // Auto-Next: after a CORRECT answer, advance on a timer so the user sees the
+    // verdict but doesn't have to click. NOT on a wrong answer (hold so they can
+    // study the right action and click Next themselves), and NOT after
+    // "Показать ответ" (revealed) — there they pressed reveal to study it.
+    clearAutoNext();
+    if (state.autoNext && grading.in_strategy && !grading.revealed) {
+      state.autoNextTimer = setTimeout(advanceToBufferedNext, AUTO_NEXT_MS);
+    }
   }
 
   function hideReveal() {
@@ -548,7 +591,19 @@
     lfbVerdict.className = 'lfb-verdict';
   }
 
+  function clearAutoNext() {
+    if (state.autoNextTimer) {
+      clearTimeout(state.autoNextTimer);
+      state.autoNextTimer = null;
+    }
+  }
+
   function advanceToBufferedNext() {
+    // Double-fire guard: a manual "Дальше" click and the auto-advance timer can
+    // race. Once we've advanced, the reveal strip is hidden — bail on the second
+    // call so it doesn't see bufferedNext=null and wrongly end the session.
+    if (feedbackStrip.style.display === 'none') return;
+    clearAutoNext();
     hideReveal();
     setActionButtonsDisabled(false);
     if (!state.bufferedNext) {
@@ -575,6 +630,7 @@
   // Exactly one is visible at a time. Helper below toggles them centrally so
   // we can never get into a state where two screens overlap.
   function showSection(which) {
+    clearAutoNext();   // any screen change cancels a pending auto-advance
     entrySec.style.display    = (which === 'entry')   ? '' : 'none';
     cardSec.style.display     = (which === 'card')    ? '' : 'none';
     revealSec.style.display   = (which === 'reveal')  ? '' : 'none';
@@ -603,6 +659,16 @@
     backBtn.addEventListener('click', () => {
       showEntryScreen();
       refreshStatus();
+    });
+  }
+
+  // "End Session" — finish now and show the session summary (vs. the quiet
+  // "Back to deck overview" which just abandons to the entry screen). Reuses
+  // the same summary screen that pops when the day's queue empties.
+  if (endBtn) {
+    endBtn.addEventListener('click', () => {
+      clearAutoNext();
+      showEndOfSession();
     });
   }
 

@@ -9,6 +9,11 @@ __pycache__/
 venv/
 env/
 
+# Local secrets — environment variables (DATABASE_URL etc). NEVER commit.
+# The no-secrets template .env.example IS tracked.
+.env
+.env.local
+
 # OS junk
 .DS_Store
 Thumbs.db
@@ -77,5 +82,41 @@ Firefly_*.png
 tools/gtow_dumps/*.html
 tools/gtow_dumps/**/*.html
 
+# Playwright persistent profile for gtow_autocapture.py — holds your GTOW login
+# cookies/session. NEVER commit this.
+tools/gtow_dumps/.browser_profile/
+
 # Table-art scratch (previews / verify renders); table.png + variants + render_table.py stay tracked
 static/table_art/_*
+
+# Bulky source art — INPUTS to card/table/chip generators. The generated OUTPUTS
+# (cards/*.png, static/table_art/table.png, static/chip_art/coin_*.png) ARE tracked;
+# these raw screenshot folders stay local (same policy as parsed/, hand_history_archives/).
+/LayIpoker/
+/deck/
+/table/
+/chips/
+
+# Prototype hand-off scratch
+/handoff/
+
+# Card AI-deck staging (the integrated deck is tracked as cards/*.png)
+cards/_ai_staging/
+
+# Top-level GTOW saved-page dump folders (bulky source HTML, like tools/gtow_dumps/*.html).
+# The parser reads them locally; packs they produce (data/*.json) are tracked.
+/NL10_GTOW_2.5bbopen_100bb/
+/NL*_GTOW_*/
+
+# Raw Higgsfield image downloads — outputs already integrated into static/; keep local.
+/hf_*.png
+/hf_*.jpeg
+
+# Large reference paper (binary; cited in docs, not project code)
+/3534678.3539081.pdf
+
+# Bulky non-served art intermediates — live app serves static/table_art/table.png
+# and static/chip_art/coin_*.png only. Sources/backups/shelved masters stay local:
+static/table_art/*_src_*.png
+static/table_art/*.bak.png
+static/chip_art/chip_*.png

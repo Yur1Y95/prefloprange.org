@@ -1,3 +1,14 @@
 fastapi
 uvicorn[standard]
 python-multipart
+
+# Track D, D.1-api — Supabase Postgres: psycopg v3 driver + connection pool,
+# python-dotenv loads a local .env in development (no-op on Railway).
+psycopg[binary]
+psycopg_pool
+python-dotenv
+
+# Track D, D.2 — verify Supabase JWTs. PyJWT decodes/validates the token;
+# the [crypto] extra pulls in `cryptography` for the asymmetric ES256/RS256
+# signatures Supabase uses (JWKS public-key verification).
+PyJWT[crypto]

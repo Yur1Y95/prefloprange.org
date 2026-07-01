@@ -21,13 +21,15 @@ from __future__ import annotations
 import json
 import os
 from datetime import date
-from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 
 import srs
+import journal      # Track D, D.1-api-write: append each Learn answer to the journal
+import cards_store  # Track D, D.1-api-cards: deck state persistence (DB or JSON)
+import auth          # Track D, D.2: resolve the request's user_id from its JWT
 
 
 # ---------------------------------------------------------------------------
@@ -40,10 +42,6 @@ SRS_DIR      = os.path.join(BASE_DIR, "srs_state")
 
 # Allowed scope values for /api/srs/init — anything else is rejected
 VALID_SPOTS = {"RFI", "vs_RFI", "vs_3bet", "vs_4bet", "iso"}
-
-
-def _ensure_srs_dir() -> None:
-    Path(SRS_DIR).mkdir(parents=True, exist_ok=True)
 
 
 def _safe_path_in(base_dir: str, filename: str) -> str:
@@ -89,13 +87,39 @@ def _load_range_spots(range_file: str) -> dict:
     return spots
 
 
-def _load_deck(range_file: str) -> list[srs.Card]:
-    return srs.load_state(_state_path_for(range_file))
+def _pack_stem(range_file: str) -> str:
+    """Bare pack identity ('GTOWNL10.json' -> 'GTOWNL10') — keys the cards rows."""
+    return range_file[:-5] if range_file.endswith(".json") else range_file
 
 
-def _save_deck(range_file: str, cards: list[srs.Card]) -> None:
-    _ensure_srs_dir()
-    srs.save_state(cards, _state_path_for(range_file))
+# Persistence delegates to cards_store, which picks DB-vs-JSON by configuration
+# (Track D, D.1-api-cards). srs_api still owns the *safe* JSON path (via
+# _state_path_for -> _safe_path_in, preserving the path-traversal guard), and
+# passes the pack stem (the DB row key), that path (JSON branch only), and the
+# user_id (D.2 — the JWT subject in DB mode, or the dev user when auth is off).
+def _deck_exists(range_file: str, user_id) -> bool:
+    return cards_store.deck_exists(_pack_stem(range_file), _state_path_for(range_file),
+                                   user_id=user_id)
+
+
+def _load_deck(range_file: str, user_id) -> list[srs.Card]:
+    return cards_store.load_deck(_pack_stem(range_file), _state_path_for(range_file),
+                                 user_id=user_id)
+
+
+def _replace_deck(range_file: str, cards: list[srs.Card], user_id) -> None:
+    cards_store.replace_deck(_pack_stem(range_file), _state_path_for(range_file), cards,
+                             user_id=user_id)
+
+
+def _save_card(range_file: str, card: srs.Card, deck: list[srs.Card], user_id) -> None:
+    cards_store.save_card(_pack_stem(range_file), _state_path_for(range_file), card, deck,
+                          user_id=user_id)
+
+
+def _delete_deck(range_file: str, user_id) -> None:
+    cards_store.delete_deck(_pack_stem(range_file), _state_path_for(range_file),
+                            user_id=user_id)
 
 
 def _find_card(cards: list[srs.Card], card_id: str) -> srs.Card:
@@ -160,25 +184,23 @@ router = APIRouter(prefix="/api/srs", tags=["srs"])
 
 
 @router.get("/status")
-def srs_status(file: str = Query(...)):
+def srs_status(file: str = Query(...), user=Depends(auth.get_current_user)):
     """Lightweight check: does this range have an initialized deck?"""
-    state_path = _state_path_for(file)
-    if not os.path.exists(state_path):
+    if not _deck_exists(file, user):
         return {"initialized": False, "file": file}
-    cards = _load_deck(file)
+    cards = _load_deck(file, user)
     summary = srs.summarize(cards, today=date.today())
     return {"initialized": True, "file": file, **summary}
 
 
 @router.post("/init")
-def srs_init(req: InitRequest):
+def srs_init(req: InitRequest, user=Depends(auth.get_current_user)):
     """
     Build the deck from the range file's `spots`. Idempotent unless `force=True`:
     on an already-initialized deck this returns a 409 to prevent accidentally
     wiping someone's review history.
     """
-    state_path = _state_path_for(req.file)
-    if os.path.exists(state_path) and not req.force:
+    if _deck_exists(req.file, user) and not req.force:
         raise HTTPException(
             status_code=409,
             detail="Deck already initialized for this range. Pass force=true to overwrite.",
@@ -194,7 +216,7 @@ def srs_init(req: InitRequest):
         scope = tuple(req.scope)
 
     cards = srs.init_cards_from_spots(spots, scope=scope)
-    _save_deck(req.file, cards)
+    _replace_deck(req.file, cards, user)
     return {
         "initialized": True,
         "file": req.file,
@@ -205,7 +227,8 @@ def srs_init(req: InitRequest):
 
 @router.get("/next")
 def srs_next(file: str = Query(...),
-             new_limit: int = Query(srs.NEW_CARDS_PER_DAY, ge=0)):
+             new_limit: int = Query(srs.NEW_CARDS_PER_DAY, ge=0),
+             user=Depends(auth.get_current_user)):
     """Returns the next due card (or null if queue is empty for today).
 
     ``new_limit`` caps how many *new* cards enter today's queue (reviews that
@@ -213,7 +236,7 @@ def srs_next(file: str = Query(...),
     (10/15/30/50, or a large number for "unlimited"); the default matches
     NEW_CARDS_PER_DAY so any caller that omits it behaves as before.
     """
-    cards = _load_deck(file)
+    cards = _load_deck(file, user)
     if not cards:
         raise HTTPException(status_code=404, detail="Deck not initialized. Call /api/srs/init first.")
     due = srs.get_due_cards(cards, today=date.today(), new_limit=new_limit)
@@ -224,14 +247,14 @@ def srs_next(file: str = Query(...),
 
 
 @router.post("/answer")
-def srs_answer(req: AnswerRequest):
+def srs_answer(req: AnswerRequest, user=Depends(auth.get_current_user)):
     """
     Submit the user's action. Returns:
       - grading: was the action in-strategy, what SM-2 rating got applied,
                  and the full correct strategy (so UI can reveal the truth)
       - next:    the next due card (or null if queue empty)
     """
-    cards = _load_deck(req.file)
+    cards = _load_deck(req.file, user)
     if not cards:
         raise HTTPException(status_code=404, detail="Deck not initialized. Call /api/srs/init first.")
 
@@ -250,7 +273,20 @@ def srs_answer(req: AnswerRequest):
         rating = srs.grade_answer(card, req.user_action, marked_easy=req.marked_easy)
         in_strategy = card.correct_strategy.get(req.user_action, 0) > 0
     srs.update_card(card, rating, today=date.today())
-    _save_deck(req.file, cards)
+    # Persist the one mutated card (DB upsert, or whole-file JSON rewrite under
+    # soft degradation). Unlike the best-effort journal below, this is STATE: if
+    # the DB write fails it propagates (500) rather than silently losing the rep.
+    _save_card(req.file, card, cards, user)
+
+    # Track D, D.1-api-write: append this Learn answer to the DB journal, in
+    # parallel with the SRS-state saved just above. Best-effort and a no-op
+    # without DATABASE_URL, so prod (JSON-only) is unaffected. `user` is the JWT
+    # subject in DB mode (D.2), or the dev user when auth is off.
+    journal.record_learn_answer(
+        card, pack=req.file, user_action=req.user_action,
+        rating=rating, in_strategy=in_strategy, revealed=req.reveal,
+        user_id=user,
+    )
 
     # Reveal the answer to the UI now that grading is done
     answer_view = _card_for_ui(card, reveal_strategy=True)
@@ -275,25 +311,23 @@ def srs_answer(req: AnswerRequest):
 
 
 @router.get("/summary")
-def srs_summary(file: str = Query(...)):
+def srs_summary(file: str = Query(...), user=Depends(auth.get_current_user)):
     """Dashboard counters: total, new, due today, young, learned."""
-    cards = _load_deck(file)
+    cards = _load_deck(file, user)
     if not cards:
         raise HTTPException(status_code=404, detail="Deck not initialized.")
     return srs.summarize(cards, today=date.today())
 
 
 @router.post("/reset")
-def srs_reset(file: str = Query(...)):
+def srs_reset(file: str = Query(...), user=Depends(auth.get_current_user)):
     """Wipe the deck for this range file. Caller must re-init afterwards."""
-    state_path = _state_path_for(file)
-    if os.path.exists(state_path):
-        os.remove(state_path)
+    _delete_deck(file, user)
     return {"status": "reset", "file": file}
 
 
 @router.post("/upgrade_easy")
-def srs_upgrade_easy(req: UpgradeEasyRequest):
+def srs_upgrade_easy(req: UpgradeEasyRequest, user=Depends(auth.get_current_user)):
     """
     Upgrade a card's most-recent GOOD answer to EASY.
 
@@ -303,12 +337,12 @@ def srs_upgrade_easy(req: UpgradeEasyRequest):
     persisted with the GOOD result by ``/answer`` — this endpoint mutates and
     re-saves it. See ``srs.upgrade_good_to_easy`` for the math and trade-offs.
     """
-    cards = _load_deck(req.file)
+    cards = _load_deck(req.file, user)
     if not cards:
         raise HTTPException(status_code=404, detail="Deck not initialized.")
     card = _find_card(cards, req.card_id)
     srs.upgrade_good_to_easy(card, today=date.today())
-    _save_deck(req.file, cards)
+    _save_card(req.file, card, cards, user)
     return {
         "ok":            True,
         "card_id":       card.card_id,

@@ -17,12 +17,27 @@ const viz = {
 
 const RANKS = ['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
 
-function rfiColor(freq) {
-  if (freq >= 1.0) return ['#2E7D32', '#fff'];
-  if (freq >= 0.75) return ['#66BB6A', '#000'];
-  if (freq >= 0.5)  return ['#D4E157', '#000'];
-  if (freq > 0)     return ['#FFA726', '#000'];
-  return ['#1e2a22', '#3a5a44'];
+// Matrix palette + gradient builders now live in static/mtx_palette.js
+// (window.MTX), shared with editor.js and drill.js. See design.md §9.1.
+// RFI is no longer a solid colour bucket — it's a split-bar of the open
+// colour with width = open frequency (MTX.rfiFill).
+
+// Legend strip under the matrix (not a side panel) — built per spot from the
+// shared MTX palette so swatches always match the cells.
+function buildVizLegend(spot) {
+  const el = document.getElementById('vizLegend');
+  if (!el) return;
+  const A = MTX.COLORS.act;
+  const fold = `${MTX.COLORS.fold};border:1px solid var(--stroke)`;
+  let rows;
+  if (spot === 'vs_3bet')      rows = [[A['4bet'], '4-Bet'], [A.call, 'Call'], [fold, 'Fold']];
+  else if (spot === 'vs_4bet') rows = [[A.allin, 'All-In'], [A.call, 'Call'], [fold, 'Fold']];
+  else if (spot === 'iso')     rows = [[A.open, 'Raise'], [A.call, 'Call'], [fold, 'Fold']];
+  else if (spot === 'RFI')     rows = [[A.open, 'Open'], [fold, 'Fold']];
+  else                         rows = [[A['3bet'], '3-Bet'], [A.call, 'Call'], [fold, 'Fold']];  // vs_RFI
+  el.innerHTML = rows.map(([bg, label]) =>
+    `<div class="legend-row"><span class="legend-swatch" style="background:${bg}"></span>${label}</div>`
+  ).join('');
 }
 
 // ── BOOT ─────────────────────────────────────────────
@@ -276,23 +291,16 @@ function vizRenderControls() {
   // Villain section
   const villainGroup  = document.getElementById('vVillainGroup');
   const actionGroup   = document.getElementById('vActionGroup');
-  const vsLegend      = document.getElementById('vsLegend');
-  const vsLegendLabel = document.getElementById('vsLegendLabel');
-  const rfiLegend     = document.getElementById('rfiLegend');
+
+  buildVizLegend(viz.spot);
 
   if (viz.spot === 'RFI') {
     villainGroup.style.display  = 'none';
     actionGroup.style.display   = 'none';
-    vsLegend.style.display      = 'none';
-    if (vsLegendLabel) vsLegendLabel.style.display = 'none';
-    rfiLegend.style.display     = 'flex';
     viz.villainPos = null;
   } else {
     villainGroup.style.display  = 'flex';
     actionGroup.style.display   = 'flex';
-    vsLegend.style.display      = 'flex';
-    if (vsLegendLabel) vsLegendLabel.style.display = 'block';
-    rfiLegend.style.display     = 'none';
 
     const optMap = viz.spot === 'vs_RFI'
       ? viz.config.vs_rfi_options
@@ -452,57 +460,35 @@ function renderMatrix(range, type) {
   });
 }
 
-// Build a left-to-right split-bar gradient with a crisp ~1px dark divider
-// between adjacent segments (B.3 variant C). `segs` = ordered [color, fraction]
-// pairs; the remainder (<1) is filled with `foldColor`. Shared by the Visualizer
-// and Editor matrices (editor.js loads after this file). Drill's hint grid keeps
-// its own gradient builder. Palette unchanged — see design.md §9.1.
-function mtxSplitGradient(segs, foldColor) {
-  const DIV = '#0b0f0d';
-  let cum = 0;
-  const stops = [];
-  for (const [color, fr] of segs) {
-    if (!fr || fr <= 0) continue;
-    const p1 = cum * 100, p2 = (cum + fr) * 100;
-    if (cum > 0) stops.push(`${DIV} ${p1.toFixed(1)}% ${(p1 + 0.8).toFixed(1)}%`);
-    stops.push(`${color} ${(cum > 0 ? p1 + 0.8 : p1).toFixed(1)}% ${p2.toFixed(1)}%`);
-    cum += fr;
-  }
-  if (cum < 1) {
-    const p = cum * 100;
-    if (cum > 0) stops.push(`${DIV} ${p.toFixed(1)}% ${(p + 0.8).toFixed(1)}%`);
-    stops.push(`${foldColor} ${(cum > 0 ? p + 0.8 : 0).toFixed(1)}% 100%`);
-  }
-  return stops.length ? `linear-gradient(to right, ${stops.join(', ')})` : foldColor;
-}
+// Split-bar gradient (1px divider between segments) lives in
+// static/mtx_palette.js as MTX.splitGradient — shared by Visualizer, Editor
+// and Drill (§9.1). Call it directly: MTX.splitGradient(segs, foldColor).
 
 function paintRFI(cell, hand, value) {
   // value is either a number (old format) or {action: freq} (new format)
   const isMulti = typeof value === 'object' && value !== null;
 
   if (!isMulti) {
-    // Legacy single-frequency
+    // Legacy single-frequency → split-bar of the open colour (width = freq).
     const freq = value || 0;
     let displayFreq = freq;
     if (viz.rngEnabled && freq > 0 && freq < 1) {
       const rng = viz.rngValues[hand] ?? 0;
       if (rng >= freq * 100) displayFreq = 0;
     }
-    const [bg, fg] = rfiColor(displayFreq);
+    const open = MTX.COLORS.act.open;
     cell.style.background = displayFreq === 0 && freq > 0
-      ? `repeating-linear-gradient(45deg,${rfiColor(freq)[0]}55 0px,${rfiColor(freq)[0]}55 4px,${rfiColor(freq)[0]}22 4px,${rfiColor(freq)[0]}22 8px)`
-      : bg;
-    cell.style.color   = fg;
+      ? `repeating-linear-gradient(45deg,${open}55 0px,${open}55 4px,${open}22 4px,${open}22 8px)`
+      : MTX.rfiFill(displayFreq);
+    cell.style.color   = '#eef0f3';
     cell.style.opacity = displayFreq === 0 && freq > 0 ? '0.55' : '1';
     return;
   }
 
-  // Multi-action: open=green, call=blue; fold remainder = empty-cell base.
-  // B.3: 1px divider between segments via the shared mtxSplitGradient helper.
-  const COLOR = { open: '#2E7D32', call: '#3F7FB5', fold: '#1e2a22' };
-  const segs = [[COLOR.open, value.open || 0], [COLOR.call, value.call || 0]];
-  cell.style.background = mtxSplitGradient(segs, COLOR.fold);
-  cell.style.color   = '#fff';
+  // Multi-action: open + call split-bar; fold remainder = matrix empty base.
+  const segs = [[MTX.COLORS.act.open, value.open || 0], [MTX.COLORS.act.call, value.call || 0]];
+  cell.style.background = MTX.splitGradient(segs, MTX.COLORS.fold);
+  cell.style.color   = '#eef0f3';
   cell.style.opacity = '1';
 }
 
@@ -530,12 +516,13 @@ function paintActions(cell, hand, actions) {
     if (!rngChosen) rngChosen = 'fold';
   }
 
-  // Build CSS gradient segments (B.3: 1px divider via shared mtxSplitGradient).
-  const COLOR = { '3bet': '#F44336', '4bet': '#c0392b', call: '#3F7FB5', fold: '#1e2a22' };
+  // Build CSS gradient segments (1px divider via MTX.splitGradient).
+  const A = MTX.COLORS.act;
+  const COLOR = { '3bet': A['3bet'], '4bet': A['4bet'], call: A.call, fold: MTX.COLORS.fold };
   const segs = actionKeys
     .map(a => [COLOR[a], filteredActions[a] || 0])
     .filter(([, f]) => f > 0);
-  cell.style.background = mtxSplitGradient(segs, COLOR.fold);
+  cell.style.background = MTX.splitGradient(segs, COLOR.fold);
 
   // RNG highlight: dim non-chosen
   if (viz.rngEnabled && rngChosen) {
@@ -546,7 +533,7 @@ function paintActions(cell, hand, actions) {
     if (rngChosen === 'fold') cell.style.background = COLOR.fold;
   }
 
-  cell.style.color = '#fff';
+  cell.style.color = '#eef0f3';
 }
 
 // ── HOVER INFO ────────────────────────────────────────

@@ -3,16 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NLH Range Trainer</title>
+  <title>PreflopRange</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260615b">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css?v=20260623c">
 </head>
 <body>
 
   <nav class="topbar">
-    <span class="logo">NLH TRAINER</span>
+    <span class="logo">
+      <span class="logo-mark">P</span>
+      <span class="logo-text">Preflop<span class="logo-accent">Range</span></span>
+    </span>
     <div class="mode-tabs">
       <button class="mode-tab" data-mode="editor">Editor</button>
       <button class="mode-tab" data-mode="visualizer">Visualizer</button>
@@ -95,7 +99,7 @@
     <section class="editor-section">
       <div class="editor-topbar">
         <span class="editor-status" id="editorStatus">— combos · —%</span>
-        <span class="viz-hover" id="editorHover">Click or drag to paint</span>
+        <span class="viz-hover" id="editorHover">Click to add / remove · drag to fill</span>
       </div>
       <div class="editor-matrix-wrap">
         <div class="editor-matrix" id="editorMatrix"></div>
@@ -255,28 +259,15 @@
         <span class="viz-status" id="vizStatus">—</span>
         <span class="viz-hover"  id="vizHover">Hover a cell for the action breakdown</span>
       </div>
+      <!-- Matrix + legend are ONE centered group so the legend always hugs
+           the grid (no big gap, no scroll). Built per spot by visualizer.js. -->
       <div class="matrix-wrap">
-        <div class="matrix" id="matrix"></div>
+        <div class="matrix-stack">
+          <div class="matrix" id="matrix"></div>
+          <div class="viz-legend" id="vizLegend"></div>
+        </div>
       </div>
     </section>
-
-    <aside class="panel panel-right viz-legend-panel">
-      <div class="control-label" style="margin-bottom:8px">RFI Legend</div>
-      <div class="legend-items" id="rfiLegend">
-        <div class="legend-row"><div class="legend-swatch" style="background:#2E7D32"></div><span>100% — always</span></div>
-        <div class="legend-row"><div class="legend-swatch" style="background:#66BB6A"></div><span>75% — often</span></div>
-        <div class="legend-row"><div class="legend-swatch" style="background:#D4E157"></div><span>50% — mixed</span></div>
-        <div class="legend-row"><div class="legend-swatch" style="background:#FFA726"></div><span>&lt;50% — rare</span></div>
-        <div class="legend-row"><div class="legend-swatch" style="background:#1e2a22;border:1px solid #2a3a2a"></div><span>0% — fold</span></div>
-      </div>
-      <div class="control-label" style="margin:16px 0 8px" id="vsLegendLabel"></div>
-      <div class="legend-items" id="vsLegend" style="display:none">
-        <div class="legend-row"><div class="legend-swatch" style="background:#F44336"></div><span>3-Bet / 4-Bet</span></div>
-        <div class="legend-row"><div class="legend-swatch" style="background:#3F7FB5"></div><span>Call</span></div>
-        <div class="legend-row"><div class="legend-swatch" style="background:#2a2a2a;border:1px solid #333"></div><span>Fold</span></div>
-        <div class="legend-row"><div class="legend-swatch" style="background:linear-gradient(to right,#F44336 40%,#3F7FB5 40%)"></div><span>Mixed (split)</span></div>
-      </div>
-    </aside>
   </main>
 
   <!-- ═══════════════ DRILL ═══════════════ -->
@@ -343,7 +334,7 @@
           <span class="toggle-text">Timer (8s)</span>
         </label>
         <label class="toggle-row">
-          <input type="checkbox" id="autoNextToggle">
+          <input type="checkbox" id="autoNextToggle" checked>
           <span class="toggle-track"></span>
           <span class="toggle-text">Auto-next</span>
         </label>
@@ -354,7 +345,7 @@
     <section class="table-section">
       <div class="spot-line" id="spotLine">RFI · UTG</div>
       <div class="table-wrap">
-        <img class="table-bg" src="/static/table_art/table.png?v=20260615a" alt="">
+        <img class="table-bg" src="/static/table_art/table.png?v=20260623b" alt="">
         <div class="table-area">
           <div class="action-log" id="actionLog"></div>
           <div class="pot-block">
@@ -382,6 +373,9 @@
         <span class="fb-ev"   id="fbEv"></span>
         <button class="fb-hint" id="fbHint" style="display:none">Show Range</button>
         <button class="fb-next" id="fbNext">Next →</button>
+      </div>
+      <div class="drill-card-footer">
+        <button class="session-end-btn" id="drillEndBtn">End Session</button>
       </div>
     </section>
 
@@ -480,7 +474,7 @@
     <section id="learnCard" class="table-section" style="display:none">
       <div class="spot-line" id="learnSpotLine">— · —</div>
       <div class="table-wrap">
-        <img class="table-bg" src="/static/table_art/table.png?v=20260615a" alt="">
+        <img class="table-bg" src="/static/table_art/table.png?v=20260623b" alt="">
         <div class="table-area">
           <div class="pot-block">
             <span class="pot-label">Total Pot :</span>
@@ -502,6 +496,8 @@
       </div>
       <div class="learn-card-footer">
         <button class="learn-back-btn" id="learnBackBtn">← Back to deck overview</button>
+        <button class="session-end-btn" id="learnEndBtn">End Session</button>
+        <button class="learn-auto-toggle is-on" id="learnAutoNextToggle" title="Auto-advance to the next card 1s after a correct answer">Auto-Next: On</button>
         <div class="learn-queue-badge" id="learnQueueBadge"></div>
       </div>
     </section>
@@ -578,7 +574,7 @@
       <div class="spot-line" id="pfSpotLine">Postflop · Cash</div>
       <div id="pfVillainLine" style="font-size:11px;color:var(--text-mid);text-align:center;max-width:380px;line-height:1.4;margin-top:-6px;">—</div>
       <div class="table-wrap" style="margin-top:60px;">
-        <img class="table-bg" src="/static/table_art/table.png?v=20260615a" alt="">
+        <img class="table-bg" src="/static/table_art/table.png?v=20260623b" alt="">
         <div class="table-area">
           <div style="display:flex;flex-direction:column;align-items:center;gap:10px;z-index:3;">
             <div class="hero-cards" id="pfBoard"></div>
@@ -638,6 +634,19 @@
     </div>
   </main>
 
+  <!-- ═══════════════ PROGRESS (account dashboard) ═══════════════ -->
+  <!-- Opened from the user menu (top-right), not a mode-tab. Per-user, DB-only;
+       rendered entirely by account.js from /api/dashboard/overview. -->
+  <main class="layout account-layout" id="accountMode" style="display:none">
+    <div class="account-page">
+      <div class="account-head">
+        <h2 class="account-title">Progress</h2>
+        <button class="dash-refresh" id="dashRefresh" type="button" title="Reload">↻</button>
+      </div>
+      <div id="dashBody"></div>
+    </div>
+  </main>
+
   <!-- ═══════════════ HINT MODAL ═══════════════ -->
   <div id="hintOverlay">
     <div id="hintBackdrop"></div>
@@ -652,16 +661,53 @@
     </div>
   </div>
 
+  <!-- ═══════════════ DRILL SESSION SUMMARY ═══════════════ -->
+  <!-- Shown by the "End Session" button. Mirrors Learn's summary; counters
+       track the just-ended Drill session (not the all-time stats pill). -->
+  <div id="drillSummaryOverlay">
+    <div id="drillSummaryBackdrop"></div>
+    <div class="drill-summary-box">
+      <div class="learn-entry-card">
+        <h2 class="learn-entry-title">Session complete</h2>
+        <div class="learn-counters" style="grid-template-columns:repeat(3,1fr)">
+          <div class="learn-counter">
+            <div class="lc-num" id="dsAnswered">0</div>
+            <div class="lc-label">Answered</div>
+          </div>
+          <div class="learn-counter">
+            <div class="lc-num" id="dsCorrect">0</div>
+            <div class="lc-label">Correct</div>
+          </div>
+          <div class="learn-counter">
+            <div class="lc-num" id="dsAccuracy">—</div>
+            <div class="lc-label">Accuracy</div>
+          </div>
+        </div>
+        <div class="learn-actions">
+          <button class="learn-start-btn" id="drillNewSessionBtn">New session</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Cache-bust query params: bump the `v=` value when you change any JS
        file so the browser fetches the new version instead of a stale copy. -->
-  <script src="/static/cards.js?v=20260614c"></script>
-  <script src="/static/chips.js?v=20260614b"></script>
-  <script src="/static/drill.js?v=20260614c"></script>
+  <!-- Auth gate (Track D, D.2): MUST be the FIRST script. It wraps window.fetch
+       (to attach the Bearer JWT) before drill.js calls boot(). In disabled mode
+       (no SUPABASE_URL) it is a no-op, so prod is unaffected. -->
+  <script src="/static/auth_client.js?v=20260623a"></script>
+  <!-- Matrix palette: single source of truth (§9.1). Must load BEFORE
+       drill.js / visualizer.js / editor.js, which call window.MTX.* -->
+  <script src="/static/mtx_palette.js?v=20260618a"></script>
+  <script src="/static/cards.js?v=20260623a"></script>
+  <script src="/static/chips.js?v=20260615d"></script>
+  <script src="/static/drill.js?v=20260623c"></script>
   <script src="/static/postflop.js?v=20260601d"></script>
   <script src="/static/matrix_tip.js?v=20260615b"></script>
-  <script src="/static/visualizer.js?v=20260615b"></script>
-  <script src="/static/editor.js?v=20260615b"></script>
-  <script src="/static/learn.js?v=20260615a"></script>
+  <script src="/static/visualizer.js?v=20260618b"></script>
+  <script src="/static/editor.js?v=20260622a"></script>
+  <script src="/static/learn.js?v=20260623a"></script>
+  <script src="/static/account.js?v=20260623a"></script>
   <script src="/static/mobile.js?v=20260529b"></script>
 </body>
 </html>

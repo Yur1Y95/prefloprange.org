@@ -1,0 +1,147 @@
+<svg viewBox="0 0 1180 772" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system, 'Segoe UI', Roboto, sans-serif">
+  <title>Learn Mode (SRS) — поток повтора и правила планирования</title>
+  <desc>Схема Learn-блока тренажёра: построение колоды, ежедневная очередь, цикл одного повтора (grade_answer и update_card), панели правил SM-2 и экспериментального FSRS-lite.</desc>
+  <defs>
+    <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#5b6675"/></marker>
+    <style>
+      .lbl{fill:#28406b;font-size:13px;font-weight:700}
+      .bt{fill:#1f2733;font-size:12.5px;font-weight:600}
+      .bs{fill:#5b6675;font-size:11px}
+      .mono{font-family:ui-monospace,'SF Mono',Menlo,monospace}
+      .hd{fill:#ffffff;font-size:13px;font-weight:700}
+      .note{fill:#5b6675;font-size:11px}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1180" height="772" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="36" y="34" font-size="20" font-weight="700" fill="#1f2733">Learn Mode (SRS) — поток повтора и правила планирования</text>
+  <text x="36" y="54" font-size="12" fill="#5b6675">Poker Trainer · <tspan class="mono">srs.py</tspan> (SM-2, прод) + <tspan class="mono">srs_fsrs.py</tspan> (FSRS-lite, эксперимент, не в проде)</text>
+  <!-- Legend -->
+  <rect x="812" y="24" width="13" height="13" rx="2" fill="#2a8a4a"/><text x="830" y="35" font-size="11" fill="#1f2733">GOOD</text>
+  <rect x="892" y="24" width="13" height="13" rx="2" fill="#c0392b"/><text x="910" y="35" font-size="11" fill="#1f2733">AGAIN</text>
+  <rect x="978" y="24" width="13" height="13" rx="2" fill="#2b6cb0"/><text x="996" y="35" font-size="11" fill="#1f2733">EASY</text>
+  <rect x="1060" y="24" width="13" height="13" rx="2" fill="#ffffff" stroke="#9aa4b2" stroke-dasharray="3 2"/><text x="1078" y="35" font-size="11" fill="#5b6675">dev-only</text>
+
+  <!-- ============ Zone A — deck build ============ -->
+  <text x="36" y="86" class="lbl">1 · Построение колоды (один раз на пак)</text>
+  <rect x="36" y="96" width="236" height="54" rx="8" fill="#f6f7f9" stroke="#d3d8e0"/>
+  <text x="48" y="119" class="bt mono">Range JSON</text>
+  <text x="48" y="137" class="bs">spots: RFI · vs_RFI · vs_3bet …</text>
+  <line x1="272" y1="123" x2="298" y2="123" stroke="#5b6675" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="300" y="96" width="250" height="54" rx="8" fill="#f6f7f9" stroke="#d3d8e0"/>
+  <text x="312" y="119" class="bt mono">init_cards_from_spots()</text>
+  <text x="312" y="137" class="bs">→ 169 рук, implicit fold = {fold:1.0}</text>
+  <line x1="550" y1="123" x2="576" y2="123" stroke="#5b6675" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="578" y="96" width="276" height="54" rx="8" fill="#f6f7f9" stroke="#d3d8e0"/>
+  <text x="590" y="119" class="bt mono">srs_state/&lt;pack&gt;.srs.json</text>
+  <text x="590" y="137" class="bs">Card = (hand, position, spot, villain)</text>
+  <rect x="864" y="96" width="280" height="54" rx="8" fill="#eef1f5" stroke="#d3d8e0" stroke-dasharray="4 3"/>
+  <text x="876" y="119" class="bt">1 пак = 1 колода = 1 файл стейта</text>
+  <text x="876" y="137" class="bs">cash и MTT не пересекаются в обучении</text>
+
+  <!-- ============ Zone B — daily queue ============ -->
+  <text x="36" y="184" class="lbl">2 · Ежедневная очередь — <tspan class="mono" font-size="12">get_due_cards(today, new_limit)</tspan></text>
+  <rect x="36" y="194" width="560" height="66" rx="8" fill="#f6f7f9" stroke="#d3d8e0"/>
+  <text x="50" y="219" class="bt">due reviews: <tspan class="mono" font-weight="400" fill="#5b6675">next_review ≤ today</tspan> — отдаются всегда</text>
+  <text x="50" y="243" class="bt">+ new cards: <tspan class="mono" font-weight="400" fill="#5b6675">md5(card_id)</tspan>-шафл, срез по <tspan class="mono" font-weight="400" fill="#5b6675">new_limit</tspan>/день</text>
+  <line x1="596" y1="227" x2="622" y2="227" stroke="#5b6675" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="624" y="194" width="234" height="66" rx="8" fill="#eef4ee" stroke="#bcd6c4"/>
+  <text x="636" y="219" class="bt">Queue на сегодня</text>
+  <text x="636" y="243" class="bs">due + капнутые new</text>
+  <rect x="872" y="194" width="272" height="66" rx="8" fill="#eef1f5" stroke="#d3d8e0" stroke-dasharray="4 3"/>
+  <text x="884" y="216" class="bs">new_limit: 10 / 15 / 30 / 50 / ∞</text>
+  <text x="884" y="234" class="bs">кап показа, не свойство колоды</text>
+  <text x="884" y="251" class="bs">learned ≥ 21 дн → долговременная память</text>
+
+  <!-- ============ Zone C — review loop (left) ============ -->
+  <rect x="36" y="282" width="560" height="448" rx="10" fill="#fbfcfd" stroke="#cdd3dc"/>
+  <rect x="36" y="282" width="560" height="30" rx="10" fill="#28406b"/>
+  <rect x="36" y="298" width="560" height="14" fill="#28406b"/>
+  <text x="50" y="302" class="hd">3 · Цикл одного повтора (review loop)</text>
+
+  <!-- loop back arrow -->
+  <path d="M56,668 L46,668 L46,338 L57,338" fill="none" stroke="#9aa4b2" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- box 1 -->
+  <rect x="64" y="324" width="516" height="50" rx="8" fill="#ffffff" stroke="#d3d8e0"/>
+  <text x="78" y="346" class="bt">① <tspan class="mono" font-size="12">GET /api/srs/next</tspan> → карточка-вопрос</text>
+  <text x="78" y="364" class="bs">UI: кнопки действий по типу спота + «Показать ответ»</text>
+  <line x1="322" y1="374" x2="322" y2="388" stroke="#5b6675" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- box 2 grade -->
+  <rect x="64" y="390" width="516" height="128" rx="8" fill="#ffffff" stroke="#d3d8e0"/>
+  <text x="78" y="412" class="bt">② Ответ → <tspan class="mono" font-size="12">grade_answer(card, action, marked_easy)</tspan></text>
+  <rect x="78" y="424" width="488" height="26" rx="5" fill="#e6f4ec"/>
+  <text x="90" y="441" font-size="11.5" fill="#1f2733">action ∈ strategy (freq &gt; 0) → <tspan font-weight="700" fill="#2a8a4a">GOOD</tspan>  ·  marked_easy → <tspan font-weight="700" fill="#2b6cb0">EASY</tspan></text>
+  <rect x="78" y="454" width="488" height="26" rx="5" fill="#f9e7e4"/>
+  <text x="90" y="471" font-size="11.5" fill="#1f2733">action ∉ strategy / неизвестно → <tspan font-weight="700" fill="#c0392b">AGAIN</tspan></text>
+  <rect x="78" y="484" width="488" height="26" rx="5" fill="#f9e7e4"/>
+  <text x="90" y="501" font-size="11.5" fill="#1f2733">«Показать ответ» (<tspan class="mono">reveal=true</tspan>) → <tspan font-weight="700" fill="#c0392b">AGAIN</tspan> (принудительно)</text>
+  <line x1="322" y1="518" x2="322" y2="532" stroke="#5b6675" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- box 3 -->
+  <rect x="64" y="534" width="516" height="48" rx="8" fill="#ffffff" stroke="#d3d8e0"/>
+  <text x="78" y="555" class="bt">③ <tspan class="mono" font-size="12">update_card(rating)</tspan> — пересчёт SM-2</text>
+  <text x="78" y="572" class="bs">interval &amp; ease обновляются · запись в history (Δt, rating)</text>
+  <line x1="322" y1="582" x2="322" y2="596" stroke="#5b6675" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- box 4 -->
+  <rect x="64" y="598" width="516" height="44" rx="8" fill="#ffffff" stroke="#d3d8e0"/>
+  <text x="78" y="617" class="bt">④ <tspan class="mono" font-size="12">save_state</tspan> → раскрыть <tspan class="mono" font-size="12">correct_strategy</tspan></text>
+  <text x="78" y="633" class="bs">ответ показывается ПОСЛЕ грейда — вопрос не спойлерится</text>
+  <line x1="322" y1="642" x2="322" y2="654" stroke="#5b6675" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- box 5 -->
+  <rect x="64" y="656" width="516" height="44" rx="8" fill="#ffffff" stroke="#d3d8e0"/>
+  <text x="78" y="675" class="bt">⑤ Следующая карта — auto-next 1.5 с</text>
+  <text x="78" y="691" class="bs">после reveal авто-перехода нет (изучаешь ответ вручную)</text>
+
+  <!-- ============ Zone D — SM-2 rules (right top) ============ -->
+  <rect x="624" y="282" width="520" height="250" rx="10" fill="#fbfcfd" stroke="#cdd3dc"/>
+  <rect x="624" y="282" width="520" height="30" rx="10" fill="#28406b"/>
+  <rect x="624" y="298" width="520" height="14" fill="#28406b"/>
+  <text x="638" y="302" class="hd">4 · SM-2 — эффект рейтинга на (interval, ease)</text>
+
+  <rect x="638" y="322" width="92" height="34" rx="6" fill="#e6f4ec" stroke="#bcd6c4"/>
+  <text x="684" y="343" font-size="12" font-weight="700" fill="#2a8a4a" text-anchor="middle">GOOD · 3</text>
+  <text x="742" y="338" class="bt mono" font-size="11.5">interval: 0→1→3→round(prev×ease)</text>
+  <text x="742" y="353" class="bs">лесенка graduation · ease без изменений</text>
+
+  <rect x="638" y="362" width="92" height="34" rx="6" fill="#f9e7e4" stroke="#e6bdb6"/>
+  <text x="684" y="383" font-size="12" font-weight="700" fill="#c0392b" text-anchor="middle">AGAIN · 1</text>
+  <text x="742" y="378" class="bt mono" font-size="11.5">interval → 1 · ease − 0.20</text>
+  <text x="742" y="393" class="bs">пол ease = 1.3 · streak обнуляется</text>
+
+  <rect x="638" y="402" width="92" height="34" rx="6" fill="#e6eef8" stroke="#bcccea"/>
+  <text x="684" y="423" font-size="12" font-weight="700" fill="#2b6cb0" text-anchor="middle">EASY · 4</text>
+  <text x="742" y="418" class="bt mono" font-size="11.5">0→3, иначе round(prev×ease×1.3)</text>
+  <text x="742" y="433" class="bs">ease + 0.15 · из UI убрана (ядро живо)</text>
+
+  <rect x="638" y="442" width="92" height="34" rx="6" fill="#eef1f5" stroke="#d3d8e0"/>
+  <text x="684" y="463" font-size="12" font-weight="700" fill="#7a8696" text-anchor="middle">HARD · 2</text>
+  <text x="742" y="458" class="bt">в Learn UI не используется</text>
+  <text x="742" y="473" class="bs">примитив SM-2 сохранён в ядре</text>
+
+  <line x1="638" y1="490" x2="1130" y2="490" stroke="#e2e6ec"/>
+  <text x="638" y="508" class="bs"><tspan class="mono" fill="#1f2733">classify()</tspan>: dominant ≥ 0.95 → pure_&lt;action&gt;, иначе mixed</text>
+  <text x="638" y="524" class="bs"><tspan class="mono" fill="#1f2733">ease₀=2.5 · MIN_EASE=1.3 · NEW/день=15 · learned≥21д</tspan></text>
+
+  <!-- ============ Zone E — FSRS-lite (right bottom) ============ -->
+  <rect x="624" y="548" width="520" height="182" rx="10" fill="#fcfbf8" stroke="#cdd3dc" stroke-dasharray="5 3"/>
+  <rect x="624" y="548" width="520" height="30" rx="10" fill="#6b5b2e"/>
+  <rect x="624" y="564" width="520" height="14" fill="#6b5b2e"/>
+  <text x="638" y="568" class="hd">5 · FSRS-lite — параллельно SM-2, НЕ подключён к API</text>
+
+  <text x="640" y="600" class="bt mono" font-size="11.5">seed_difficulty(strategy) → [1..10]</text>
+  <text x="640" y="617" class="bs">pure → 2.0 · near-pure(0.9) → ~4.4 · ровный микс → 8.0 · мульти-вей → clamp 10</text>
+  <text x="640" y="640" class="bt mono" font-size="11.5">FSRS-6 (py-fsrs)</text>
+  <text x="640" y="657" class="bs">desired_retention 0.95 · maximum_interval 120 · learning_steps ()</text>
+  <text x="640" y="680" class="bt">Зачем сид: при бинарном вводе Good не двигает ни ease, ни difficulty</text>
+  <text x="640" y="697" class="bs">→ pure-карту и близкий микс не различить без стартовой трудности</text>
+  <text x="640" y="719" class="note"><tspan class="mono" fill="#6b5b2e">fsrs</tspan> не в requirements.txt · A/B-харнесс гоняет историю из srs_state/*</text>
+
+  <!-- footer -->
+  <text x="36" y="752" font-size="11" fill="#7a8696">Один повтор = HTTP-цикл <tspan class="mono">/next → /answer</tspan>. Грейдинг бинарный (Chessable-стиль): «попал в стратегию / нет», без самооценки сложности.</text>
+</svg>

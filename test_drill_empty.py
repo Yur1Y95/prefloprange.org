@@ -70,11 +70,11 @@ def test_drill_hand_none_on_empty():
 
 
 def test_real_packs():
-    # NL25GTOW: RFI filled (UTG..SB), vs_RFI/vs_3bet empty.
+    # NL25GTOW: all three preflop spots filled (vs_RFI/vs_3bet completed 2026-06-05).
     gtow = _load("NL25GTOW.json")
     check("NL25GTOW RFI UTG -> hand", get_drill_hand_rfi(gtow, "UTG") is not None)
-    check("NL25GTOW vs_RFI BTN<UTG -> None", get_drill_hand_vs_rfi(gtow, "BTN", "UTG") is None)
-    check("NL25GTOW vs_3bet -> None", get_drill_hand_vs_3bet(gtow, "UTG", "BTN") is None)
+    check("NL25GTOW vs_RFI BTN<UTG -> hand", get_drill_hand_vs_rfi(gtow, "BTN", "UTG") is not None)
+    check("NL25GTOW vs_3bet UTG<BTN -> hand", get_drill_hand_vs_3bet(gtow, "UTG", "BTN") is not None)
 
     # cash_6max_100bb: vs_RFI filled.
     cash = _load("cash_6max_100bb.json")

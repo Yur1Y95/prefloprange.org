@@ -13,19 +13,17 @@ function comboCnt(hand) {
   return 12;
 }
 
-function rfiColor(freq) {
-  if (freq >= 1.0)  return ['#2E7D32', '#fff'];
-  if (freq >= 0.75) return ['#66BB6A', '#000'];
-  if (freq >= 0.5)  return ['#D4E157', '#000'];
-  if (freq > 0)     return ['#FFA726', '#000'];
-  return ['#1e2a22', '#3a5a44'];
-}
+// Matrix palette + gradient builders live in static/mtx_palette.js (window.MTX),
+// shared with visualizer.js and drill.js (§9.1). The old per-file rfiColor bucket
+// helper was removed — RFI is now a split-bar of the open colour (MTX.rfiFill).
 
 // ── EDITOR STATE ─────────────────────────────────────
 const ed = {
-  // File config
+  // File config — defaults mirror the <select> first options in index.html
+  // (Game=MTT, Table=6-max, Depth=100). editorBoot() also re-syncs these from
+  // the live selects so the two can never drift (P-038).
   gameType:  'MTT',
-  tableSize: '8max',
+  tableSize: '6max',
   depth:     '100',
 
   // Loaded file tracking (null = new, unsaved range)
@@ -45,6 +43,8 @@ const ed = {
   action:    'open',
   freq:      100,
   isDragging: false,
+  dragMode:   null,   // 'paint' | 'eraseAction' | 'eraseAll' — fixed on mousedown,
+                      // held for the whole drag (see edResolveMode).
 
   // Full range being built:
   // ranges.RFI[heroPos][hand]                        = frequency (0..1)
@@ -54,8 +54,13 @@ const ed = {
 };
 
 // ── POSITION CONFIGS ──────────────────────────────────
+// Keyed by TABLE SIZE only — the seating/RFI/vs structure depends on how many
+// seats the table has, NOT on Cash vs MTT (a 6-max table is UTG/MP/CO/BTN/SB/BB
+// either way; only the ranges differ, never the positions). Keying by
+// "${game}_${table}" used to leave "MTT 6-max" without a config → silent
+// fallback to 8-max → 7 RFI seats instead of 5. See docs/problems.md P-038.
 const POS_CONFIGS = {
-  'mtt_8max': {
+  '8max': {
     positions: ['UTG','UTG+1','MP','HJ','CO','BTN','SB','BB'],
     rfi:       ['UTG','UTG+1','MP','HJ','CO','BTN','SB'],
     vs_rfi: {
@@ -77,7 +82,7 @@ const POS_CONFIGS = {
       'SB':    ['BB'],
     },
   },
-  'mtt_9max': {
+  '9max': {
     positions: ['UTG','UTG+1','UTG+2','MP','HJ','CO','BTN','SB','BB'],
     rfi:       ['UTG','UTG+1','UTG+2','MP','HJ','CO','BTN','SB'],
     vs_rfi: {
@@ -101,7 +106,7 @@ const POS_CONFIGS = {
       'SB':    ['BB'],
     },
   },
-  'cash_6max': {
+  '6max': {
     positions: ['UTG','MP','CO','BTN','SB','BB'],
     rfi:       ['UTG','MP','CO','BTN','SB'],
     vs_rfi: {
@@ -139,8 +144,8 @@ const ACTION_TEXT_COLORS = {
 
 // ── HELPERS ───────────────────────────────────────────
 function edPosConfig() {
-  const key = `${ed.gameType.toLowerCase()}_${ed.tableSize}`;
-  return POS_CONFIGS[key] || POS_CONFIGS['mtt_8max'];
+  // Table size is the only thing that determines positions (see POS_CONFIGS note).
+  return POS_CONFIGS[ed.tableSize] || POS_CONFIGS['6max'];
 }
 
 function edRangeKey() {
@@ -208,9 +213,11 @@ function edApplyQuickSelect(groupKey) {
   const hands = QS_GROUPS[groupKey]?.();
   if (!hands) return;
   hands.forEach(hand => {
-    // Only paint hands that exist in the 13x13 matrix
+    // Quick Select always ADDS (paint mode), never toggles — so applying
+    // several groups in a row accumulates the range instead of cancelling
+    // overlapping hands. Only touch hands that exist in the 13x13 matrix.
     if (document.querySelector(`#editorMatrix [data-hand="${hand}"]`))
-      edPaintHand(hand);
+      edApplyToHand(hand, 'paint');
   });
 }
 
@@ -260,6 +267,14 @@ function bindQsPopup() {
 function editorBoot() {
   edBindEvents();
   bindQsPopup();
+
+  // Sync ed.* from the actual <select> values BEFORE the first render, so the
+  // positions shown under Hero match the visible Table size (P-038). Then derive
+  // a valid hero for that table size.
+  edReadFormatSelects();
+  edApplyDepthVisibility();
+  ed.heroPos = edPosConfig().rfi[0];
+
   edRenderControls();
   edBuildMatrix();
   edUpdateMatrix();
@@ -314,14 +329,23 @@ function edApplyDepthVisibility() {
   }
 }
 
+// Read the live Format <select> values into ed.*. Called on every change AND
+// once at boot — without the boot call, ed.tableSize kept its JS default while
+// the dropdown showed its first option, so the rendered positions disagreed
+// with the visible Table value (P-038). Reading the DOM (rather than writing it)
+// also respects browser session-restore / autofill of the selects.
+function edReadFormatSelects() {
+  ed.gameType  = document.getElementById('eGameType').value;
+  ed.tableSize = document.getElementById('eTableSize').value;
+  ed.depth     = document.getElementById('eDepth').value;
+}
+
 // ── EVENTS ────────────────────────────────────────────
 function edBindEvents() {
   // Format selects
   ['eGameType','eTableSize','eDepth'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
-      ed.gameType  = document.getElementById('eGameType').value;
-      ed.tableSize = document.getElementById('eTableSize').value;
-      ed.depth     = document.getElementById('eDepth').value;
+      edReadFormatSelects();
       edApplyDepthVisibility();   // toggle Depth row based on new gameType
       ed.heroPos   = edPosConfig().rfi[0];
       ed.villainPos = null;
@@ -395,22 +419,40 @@ function edBindEvents() {
     edUpdateMatrix();
   });
 
-  // Matrix drag
+  // Matrix: a single click TOGGLES a hand, a drag fills/erases a region.
+  // The mode (paint vs erase) is decided ONCE on mousedown from the first cell
+  // and held for the whole swipe — so dragging across cells never flip-flops
+  // them on-and-off mid-drag (Flopzilla/GTO+ behaviour). See edResolveMode.
   const matrix = document.getElementById('editorMatrix');
   matrix.addEventListener('mousedown', e => {
+    const cell = e.target.closest('.matrix-cell');
+    if (!cell) return;
     ed.isDragging = true;
-    edPaintFromEvent(e);
+    ed.dragMode   = edResolveMode(cell.dataset.hand);
+    edApplyToHand(cell.dataset.hand, ed.dragMode);
   });
   matrix.addEventListener('mouseover', e => {
-    if (ed.isDragging) edPaintFromEvent(e);
+    if (!ed.isDragging) return;
+    const cell = e.target.closest('.matrix-cell');
+    if (!cell) return;
+    edApplyToHand(cell.dataset.hand, ed.dragMode);
   });
-  document.addEventListener('mouseup', () => { ed.isDragging = false; });
+  document.addEventListener('mouseup', () => { ed.isDragging = false; ed.dragMode = null; });
 }
 
-function edPaintFromEvent(e) {
-  const cell = e.target.closest('.matrix-cell');
-  if (!cell) return;
-  edPaintHand(cell.dataset.hand);
+// Decide what a click/drag does to a hand BEFORE mutating it. Called once on
+// mousedown so the whole drag keeps a single mode (never toggles a cell twice):
+//   - 🗑 tool selected                         → 'eraseAll'    (wipe whole hand)
+//   - chosen action already set at exactly the
+//     slider frequency                         → 'eraseAction' (2nd click = off)
+//   - otherwise (absent, or a different weight) → 'paint'       (add / re-weight)
+function edResolveMode(hand) {
+  if (ed.action === 'clear') return 'eraseAll';
+  const range      = edRangeKey();
+  const cur        = (range[hand] && range[hand][ed.action]) || 0;
+  const freq       = ed.freq / 100;
+  const sameWeight = cur > 0 && Math.abs(cur - freq) < 0.005;
+  return sameWeight ? 'eraseAction' : 'paint';
 }
 
 // ── FREQUENCY (slider ↔ number field ↔ presets) ───────
@@ -518,40 +560,62 @@ function edBuildMatrix() {
   }
 }
 
-// ── PAINT A HAND ─────────────────────────────────────
-function edPaintHand(hand) {
-  edMarkDirty();   // P-015: any paint/clear of a hand is an unsaved edit
+// ── APPLY A MODE TO A HAND ───────────────────────────
+// Single mutation point for click + drag. `mode` comes from edResolveMode:
+//   'eraseAll'    — remove the hand entirely (🗑 tool / drag-erase region)
+//   'eraseAction' — toggle the chosen action off (2nd click on a painted hand)
+//   'paint'       — set/replace the chosen action at the slider frequency
+// Paint keeps the original cap-total-to-1.0 normalisation (shave the OTHER
+// actions proportionally so a hand never sums above 100%).
+function edApplyToHand(hand, mode) {
+  edMarkDirty();   // P-015: any paint/erase of a hand is an unsaved edit
   const range = edRangeKey();
-  const freq  = ed.freq / 100;
 
-  if (ed.action === 'clear') {
+  if (mode === 'eraseAll') {
     delete range[hand];
     edRenderCell(hand);
     edUpdateStats();
     return;
   }
 
-  // RFI and vs spots both use {action: freq} map
-  if (!range[hand]) range[hand] = {};
+  if (mode === 'eraseAction') {
+    if (range[hand]) {
+      delete range[hand][ed.action];
+      if (Object.keys(range[hand]).length === 0) delete range[hand];
+    }
+    edRenderCell(hand);
+    edUpdateStats();
+    return;
+  }
 
+  // ── paint ──
+  const freq = ed.freq / 100;
+
+  // Slider at 0% = no weight → equivalent to erasing this action.
   if (freq === 0) {
-    delete range[hand][ed.action];
-    if (Object.keys(range[hand]).length === 0) delete range[hand];
-  } else {
-    range[hand][ed.action] = freq;
+    if (range[hand]) {
+      delete range[hand][ed.action];
+      if (Object.keys(range[hand]).length === 0) delete range[hand];
+    }
+    edRenderCell(hand);
+    edUpdateStats();
+    return;
+  }
 
-    // Cap total to 1.0
-    const total = Object.values(range[hand]).reduce((s, v) => s + v, 0);
-    if (total > 1.0) {
-      const excess = total - 1.0;
-      const others = Object.keys(range[hand]).filter(a => a !== ed.action);
-      const otherTotal = others.reduce((s, a) => s + range[hand][a], 0);
-      if (otherTotal > 0) {
-        others.forEach(a => {
-          range[hand][a] = Math.max(0, range[hand][a] - excess * (range[hand][a] / otherTotal));
-          if (range[hand][a] < 0.01) delete range[hand][a];
-        });
-      }
+  if (!range[hand]) range[hand] = {};
+  range[hand][ed.action] = freq;
+
+  // Cap total to 1.0
+  const total = Object.values(range[hand]).reduce((s, v) => s + v, 0);
+  if (total > 1.0) {
+    const excess = total - 1.0;
+    const others = Object.keys(range[hand]).filter(a => a !== ed.action);
+    const otherTotal = others.reduce((s, a) => s + range[hand][a], 0);
+    if (otherTotal > 0) {
+      others.forEach(a => {
+        range[hand][a] = Math.max(0, range[hand][a] - excess * (range[hand][a] / otherTotal));
+        if (range[hand][a] < 0.01) delete range[hand][a];
+      });
     }
   }
 
@@ -567,22 +631,16 @@ function edRenderCell(hand) {
   const value = range[hand];
 
   if (!value || Object.keys(value).length === 0) {
-    cell.style.background = '#1e2a22';
-    cell.style.color      = '#3a5a44';
+    cell.style.background = MTX.COLORS.fold;
+    cell.style.color      = '#52586399';   // §9.1: muted empty-cell label
     return;
   }
 
-  // Action colour map — open uses RFI green, call uses blue, fold dark
-  const COLOR = {
-    open:  '#2E7D32',
-    call:  '#3F7FB5',
-    '3bet':'#F44336',
-    '4bet':'#c0392b',
-    fold:  '#1e2a22',   // = empty-cell base, so fold remainder blends in (no stripe)
-  };
+  // Matrix split-bar colours — single source of truth (MTX, §9.1).
+  const A = MTX.COLORS.act;
+  const COLOR = { open: A.open, call: A.call, '3bet': A['3bet'], '4bet': A['4bet'], fold: MTX.COLORS.fold };
 
-  // Actions in display order; fold = remainder (filled by mtxSplitGradient).
-  // B.3: 1px divider between segments via the shared helper from visualizer.js.
+  // Actions in display order; fold = remainder (filled by MTX.splitGradient).
   const actionOrder = ed.spot === 'vs_3bet'
     ? ['4bet', 'call']
     : ed.spot === 'vs_RFI'
@@ -592,8 +650,8 @@ function edRenderCell(hand) {
   const segs = actionOrder
     .map(a => [COLOR[a] || '#333', value[a] || 0])
     .filter(([, f]) => f > 0);
-  cell.style.background = mtxSplitGradient(segs, COLOR.fold);
-  cell.style.color = '#fff';
+  cell.style.background = MTX.splitGradient(segs, COLOR.fold);
+  cell.style.color = '#eef0f3';
 }
 
 // ── UPDATE ALL CELLS ──────────────────────────────────

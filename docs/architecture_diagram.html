@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Poker Trainer — карта архитектуры</title>
+<style>
+  :root { --bar:#15181d; --bar-fg:#e8edf2; --accent:#d3b04a; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:#fbfbfc; font-family:-apple-system,Segoe UI,Roboto,sans-serif; }
+  #bar {
+    position:fixed; top:0; left:0; right:0; height:48px; z-index:10;
+    display:flex; align-items:center; gap:8px; padding:0 12px;
+    background:var(--bar); color:var(--bar-fg); box-shadow:0 1px 6px rgba(0,0,0,.3);
+  }
+  #bar .title { font-weight:600; font-size:14px; margin-right:auto; }
+  #bar .title small { font-weight:400; opacity:.6; margin-left:8px; }
+  button {
+    background:#262b32; color:var(--bar-fg); border:1px solid #3a414a; border-radius:7px;
+    padding:6px 11px; font-size:13px; cursor:pointer; line-height:1;
+  }
+  button:hover { border-color:var(--accent); }
+  #zoomLabel { font-size:12px; opacity:.7; width:46px; text-align:center; }
+  #viewport {
+    position:fixed; top:48px; left:0; right:0; bottom:0; overflow:hidden;
+    cursor:grab; background:
+      radial-gradient(circle at 1px 1px, #e3e6ea 1px, transparent 0) 0 0/22px 22px, #fbfbfc;
+  }
+  #viewport.grabbing { cursor:grabbing; }
+  #stage { transform-origin:0 0; will-change:transform; padding:24px; }
+  #stage svg { max-width:none !important; height:auto; }
+  #hint {
+    position:fixed; left:12px; bottom:12px; z-index:10; font-size:12px; color:#5b636d;
+    background:rgba(255,255,255,.85); border:1px solid #e0e3e7; border-radius:8px; padding:6px 10px;
+  }
+  #err { padding:64px 24px; color:#a01; font-family:ui-monospace,monospace; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+  <div id="bar">
+    <span class="title">Poker Trainer — карта архитектуры <small>колесо = зум · тащить = двигать</small></span>
+    <button id="out">−</button>
+    <span id="zoomLabel">100%</span>
+    <button id="in">+</button>
+    <button id="fit">Вписать</button>
+    <button id="reset">100%</button>
+    <button id="dl">Скачать SVG</button>
+  </div>
+  <div id="viewport"><div id="stage"></div></div>
+  <div id="hint">Откройте в браузере · зум — колесо мыши или ±  ·  двигать — перетащить мышью</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+const DEF = `flowchart TB
+    subgraph L1["🖥 Браузер · static/ (vanilla JS, без сборщика)"]
+        direction TB
+        IDX["index.html<br/>вкладки: Visualizer · Editor · Practice · Learn · Postflop"]
+        JS_live["cards.js · chips.js · drill.js · learn.js<br/>visualizer.js · editor.js · matrix_tip.js · mobile.js"]
+        JS_pf["postflop.js ❄"]
+        JS_dead["storage.js 🗑 МЁРТВОЕ — не грузится в index.html"]
+    end
+    subgraph L2["⚙ Composition root"]
+        MAIN["main.py<br/>include_router + /api/drill /ranges /stats /history + сервит UI"]
+    end
+    subgraph L3["🔌 API-роутеры (один модуль — один роутер)"]
+        direction LR
+        API_srs["srs_api.py<br/>/api/srs/* (Learn)"]
+        API_eq["equity_api.py ❄<br/>/api/equity/*"]
+        API_pf["postflop_api.py ❄<br/>/api/postflop/*"]
+    end
+    subgraph L4["🧠 Доменное ядро"]
+        direction TB
+        subgraph CORE_LIVE["живое ядро · 0 проектных импортов"]
+            direction LR
+            RE["range_engine.py<br/>load/normalize · get_ev · get_*_range"]
+            SRS["srs.py<br/>SM-2 · модель Card"]
+        end
+        DE["drill_engine.py<br/>генерация спотов · грейдинг"]
+        FSRS["srs_fsrs.py 🧪 dev-only<br/>FSRS-lite параллельно SM-2 · НЕ в srs_api"]
+        subgraph CORE_FROZEN["заморожено · постфлоп ❄"]
+            direction LR
+            EQ["equity.py ❄<br/>Монте-Карло (3× сверен)"]
+            DEC["decision.py ❄<br/>пот-оддсы"]
+            PFE["postflop_engine.py ❄<br/>споты · типы оппонентов"]
+            HC["hand_classify.py ❄<br/>lazy import из postflop_engine"]
+        end
+    end
+    subgraph L5["💾 Данные (БД нет — только JSON-файлы)"]
+        direction LR
+        DJSON["data/*.json<br/>range packs + блок ev"]
+        SRSST["srs_state/*.srs.json<br/>дек на каждый пак"]
+        STATS["stats.json"]
+        HIST["history.json"]
+    end
+    subgraph SIDE["🛠 Вне рантайма (инструменты и фундамент)"]
+        direction TB
+        GTOW["tools/gtow_*.py<br/>импорт диапазонов из GTOW → паки"]
+        HH["hh_parser.py<br/>standalone · фундамент Milestone 3"]
+        FSRST["tools/fsrs_*.py 🧪<br/>A/B-эксперименты FSRS"]
+    end
+    subgraph CLEAN["🧹 Уборка дерева · Track C.1 (не код — раздувает репозиторий)"]
+        direction TB
+        CL1["🗑 удалить сейчас:<br/>storage.js · zi7EnBeQ · dist/ · lead-finder.skill<br/>__pycache__ · NL10_GTOW_…/ (в корне) · _smoke_limit.json.disabled"]
+        CL2["🗑 когда доверишься git:<br/>cards/_backup_* · _original · _tiles_* (~265 файлов, ~24МБ)<br/>data/*.bak (~30) · Firefly_*.png · *.pdf → docs/"]
+        CL3["📦 изолировать, НЕ удалять:<br/>postflop → postflop/ · srs_fsrs+tools/fsrs_* → fsrs_experiment/<br/>hh_parser → scripts/ · test_*.py → tests/"]
+    end
+    IDX -->|HTTP| MAIN
+    MAIN -->|include_router| API_srs
+    MAIN -->|include_router| API_eq
+    MAIN -->|include_router| API_pf
+    MAIN -->|imports| RE
+    MAIN -->|imports| DE
+    API_srs -->|imports| SRS
+    API_eq -->|imports| EQ
+    API_pf -->|imports| PFE
+    DE -->|imports| RE
+    DEC -->|imports| EQ
+    PFE -->|imports| EQ
+    PFE -->|imports| DEC
+    PFE -.->|lazy| HC
+    RE -->|reads| DJSON
+    SRS -->|reads/writes| SRSST
+    MAIN -->|reads/writes| STATS
+    MAIN -->|reads/writes| HIST
+    GTOW -->|writes| DJSON
+    FSRST -.->|imports| FSRS
+    classDef live fill:#16623a,stroke:#37a86a,color:#eafff2
+    classDef frozen fill:#1f3a5f,stroke:#4d82c0,color:#dbe9fb
+    classDef dev fill:#6e5410,stroke:#d3b04a,color:#fbeec0
+    classDef dead fill:#5a1414,stroke:#d05a4a,color:#ffd9d2
+    classDef data fill:#2a2d2f,stroke:#7a8087,color:#e2e6ea
+    classDef tool fill:#34383b,stroke:#8a9097,color:#e2e6ea
+    class IDX,JS_live,MAIN,API_srs,RE,SRS,DE live
+    class JS_pf,API_eq,API_pf,EQ,DEC,PFE,HC frozen
+    class FSRS,FSRST,CL3 dev
+    class JS_dead,CL1,CL2 dead
+    class DJSON,SRSST,STATS,HIST data
+    class GTOW,HH tool`;
+
+const stage = document.getElementById('stage');
+const viewport = document.getElementById('viewport');
+const zoomLabel = document.getElementById('zoomLabel');
+let scale = 1, tx = 24, ty = 24;
+
+function apply() {
+  stage.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+  zoomLabel.textContent = Math.round(scale * 100) + '%';
+}
+function zoomAt(cx, cy, factor) {
+  const ns = Math.min(6, Math.max(0.15, scale * factor));
+  // keep the point under the cursor fixed
+  tx = cx - (cx - tx) * (ns / scale);
+  ty = cy - (cy - ty) * (ns / scale);
+  scale = ns; apply();
+}
+function fit() {
+  const svg = stage.querySelector('svg'); if (!svg) return;
+  const r = svg.getBoundingClientRect();
+  const w = r.width / scale, h = r.height / scale;       // intrinsic size
+  const vw = viewport.clientWidth - 32, vh = viewport.clientHeight - 32;
+  scale = Math.min(vw / w, vh / h);
+  tx = (viewport.clientWidth - w * scale) / 2;
+  ty = 16; apply();
+}
+
+(async () => {
+  try {
+    mermaid.initialize({ startOnLoad:false, theme:'default', securityLevel:'loose',
+                         flowchart:{ htmlLabels:true, curve:'basis' } });
+    const { svg } = await mermaid.render('archGraph', DEF);
+    stage.innerHTML = svg;
+    apply();
+    requestAnimationFrame(fit);
+  } catch (e) {
+    document.body.innerHTML = '<pre id="err">Mermaid render error:\n' + (e && e.message || e) + '</pre>';
+  }
+})();
+
+// wheel zoom toward cursor
+viewport.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect = viewport.getBoundingClientRect();
+  zoomAt(e.clientX - rect.left, e.clientY - rect.top, e.deltaY < 0 ? 1.12 : 1 / 1.12);
+}, { passive:false });
+
+// drag to pan
+let dragging = false, sx = 0, sy = 0;
+viewport.addEventListener('mousedown', (e) => { dragging = true; sx = e.clientX - tx; sy = e.clientY - ty; viewport.classList.add('grabbing'); });
+window.addEventListener('mousemove', (e) => { if (!dragging) return; tx = e.clientX - sx; ty = e.clientY - sy; apply(); });
+window.addEventListener('mouseup', () => { dragging = false; viewport.classList.remove('grabbing'); });
+
+// buttons
+const c = () => ({ x: viewport.clientWidth / 2, y: viewport.clientHeight / 2 });
+document.getElementById('in').onclick    = () => { const p = c(); zoomAt(p.x, p.y, 1.2); };
+document.getElementById('out').onclick   = () => { const p = c(); zoomAt(p.x, p.y, 1 / 1.2); };
+document.getElementById('fit').onclick   = fit;
+document.getElementById('reset').onclick = () => { scale = 1; tx = 24; ty = 24; apply(); };
+document.getElementById('dl').onclick = () => {
+  const svg = stage.querySelector('svg'); if (!svg) return;
+  const blob = new Blob([svg.outerHTML], { type:'image/svg+xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'poker_trainer_architecture.svg'; a.click();
+  URL.revokeObjectURL(a.href);
+};
+</script>
+</body>
+</html>

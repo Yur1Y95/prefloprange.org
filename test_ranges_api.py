@@ -51,6 +51,63 @@ def test_list_picks_up_seed_file():
     print("  PASS  list returns seed file")
 
 
+# ── Ordering: natural sort by NL stake ───────────────────────────────────
+
+def test_sort_key_orders_by_stake_ascending():
+    """The pack list must read low stake -> high stake, not lexicographically
+    (which put GTOWNL1000 right after GTOWNL100). Stake-less packs come last."""
+    raw = [
+        "GTOWNL1000.json", "GTOWNL10.json", "GTOWNL100.json", "GTOWNL10000.json",
+        "GTOWNL200.json", "GTOWNL2000.json", "GTOWNL50.json", "GTOWNL500.json",
+        "GTOWNL5000.json", "NL25GTOW.json", "WizardParseNL10.json",
+        "cash_6max_100bb.json", "cash_greenline_micro.json", "cash_micro_100bb.json",
+        "mtt_8max_15bb.json",
+    ]
+    ordered = [f[:-5] for f in sorted(raw, key=main._range_sort_key)]
+    assert ordered == [
+        "GTOWNL10", "WizardParseNL10",   # both stake 10 -> alphabetical tiebreak
+        "NL25GTOW",                       # stake 25 slots between 10 and 50
+        "GTOWNL50",
+        "GTOWNL100",
+        "GTOWNL200",
+        "GTOWNL500",
+        "GTOWNL1000",
+        "GTOWNL2000",
+        "GTOWNL5000",
+        "GTOWNL10000",
+        # stake-less packs last, alphabetical (case-insensitive)
+        "cash_6max_100bb", "cash_greenline_micro", "cash_micro_100bb",
+        "mtt_8max_15bb",
+    ], f"got {ordered}"
+    print("  PASS  sort key orders packs by NL stake, stake-less last")
+
+
+def test_stakeless_packs_not_misparsed_as_nl():
+    """'greenline' contains 'nl' but no digit follows, and '15bb' is a stack
+    depth, not a stake. Both must bucket as stake-less (key[0] == 1), or they'd
+    sort into the wrong place."""
+    assert main._range_sort_key("cash_greenline_micro.json")[0] == 1
+    assert main._range_sort_key("mtt_8max_15bb.json")[0] == 1
+    assert main._range_sort_key("gto_100bb_mtt.json")[0] == 1
+    # And a real NL pack buckets as a stake (key[0] == 0) with the right number.
+    assert main._range_sort_key("GTOWNL50.json")[:2] == (0, 50)
+    assert main._range_sort_key("NL25GTOW.json")[:2] == (0, 25)
+    print("  PASS  stake-less packs not misparsed; NL packs read correct stake")
+
+
+def test_list_endpoint_returns_stake_order():
+    """End-to-end: the actual /api/ranges/list response is in stake order."""
+    for stem in ("GTOWNL500", "GTOWNL50", "GTOWNL100"):
+        with open(os.path.join(_DATA, stem + ".json"), "w") as f:
+            json.dump(_SEED, f)
+    names = [f["filename"][:-5] for f in client.get("/api/ranges/list").json()]
+    i50, i100, i500 = (names.index("GTOWNL50"),
+                       names.index("GTOWNL100"),
+                       names.index("GTOWNL500"))
+    assert i50 < i100 < i500, f"got {names}"
+    print("  PASS  /api/ranges/list returns packs in ascending stake order")
+
+
 # ── Save: happy path ─────────────────────────────────────────────────────
 
 def test_save_creates_new_file():

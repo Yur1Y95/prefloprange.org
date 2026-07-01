@@ -2,7 +2,10 @@
 // Shared chip-rendering helpers (single source of truth, like cards.js).
 // A bet is a stack of denominated discs; the pot is the same discs grouped
 // per denomination into stacks side by side. Colour encodes denomination,
-// all discs share one diameter (like real casino chips). Reference prototype:
+// all discs share one diameter (like real casino chips). Each disc has an
+// extruded side wall (CSS box-shadow in the disc's own --wall colour), so a
+// stack shows each chip's colour as a band down the side — the "casino 3D"
+// look (variant A, user 2026-06-15). Reference prototype:
 // static/chips_preview.html. Rationale & decisions: docs/design.md "Фишки".
 //
 // Consumers: drill.js (renderChips — preflop bets in front of seats),
@@ -15,7 +18,12 @@ const CHIP_DENOMS = [
   { v: 0.5, cls: 'd-05', label: '.5' },
   { v: 0.1, cls: 'd-01', label: '.1' },
 ];
-const CHIP_W = 19, CHIP_H = 8, CHIP_T = 4;   // disc width, height, stacked offset (px)
+const CHIP_W = 21, CHIP_H = 11, CHIP_T = 3;  // disc width, height, stacked offset (px)
+// Discs are THIN: CSS draws an extra ~3px extruded wall below each disc
+// (box-shadow ladder, scaled by --cs) = the visible edge. Offset 3px ≈ wall, so
+// chips sit tight (a thin disc each, not fat pucks) and stacks stay short. The
+// wall is purely visual overflow, NOT part of the .coins box math; .chip-amt
+// carries a matching margin so the pill clears it.
 
 // Greedy make-change → denom objs, largest first. Rounds to 0.1 (smallest chip)
 // so float dust and sub-0.1 solver sizes don't break the loop. Never empty.

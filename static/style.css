@@ -1,20 +1,27 @@
 /* ── DESIGN TOKENS ─────────────────────────────────── */
 :root {
-  --bg:           #080d0a;
+  /* ── NEUTRALS — cool graphite (chrome-redesign §1, 2026-06-18).
+     Moved off the old charcoal-GREEN tint so the green matrix pops against
+     a neutral surround. Felt/gold/action colours below stay as-is. ── */
+  --bg:           #0a0b0e;            /* app background (was #080d0a green) */
   --felt:         #1d6b40;            /* vivid casino green base */
   --felt-hi:      #379a59;            /* lit center of the felt */
   --felt-shadow:  #0b3a21;            /* darkened toward the rail */
   --felt-line:    rgba(150,225,180,.22); /* betting line ring near edge — faint sheen */
   --rim:          #161616;            /* black padded rail */
   --rim-hi:       #353535;            /* rail top highlight */
-  --panel:        #0d1510;
+  --panel:        #14161b;            /* panels / sidebar (was #0d1510 green) */
+  --surface-2:    #1c1f26;            /* raised: cards, stat plates, avatars */
+  --surface-3:    #21242b;            /* modals, popovers, hint overlays */
+  --recessed:     #0e0f13;            /* recessed tracks (sliders, wells) */
+  --stroke:       #2f333b;            /* neutral hairline (was green var(--stroke)) */
   --panel-border: rgba(255,255,255,.06);
   --gold:         #c9a84c;
   --gold-hi:      #e8c97a;
   --gold-dim:     rgba(201,168,76,.15);
-  --text:         #dceae1;
-  --text-dim:     #5a7a65;
-  --text-mid:     #9ab8a4;
+  --text:         #e6e8ec;            /* primary (was #dceae1 green) */
+  --text-dim:     #79808c;            /* muted (was #5a7a65 green) */
+  --text-mid:     #aab0bc;            /* secondary (was #9ab8a4 green) */
   --correct:      #27ae60;
   --correct-bg:   rgba(39,174,96,.12);
   --wrong:        #c0392b;
@@ -26,9 +33,20 @@
   --c-open:  #0c3a1a;
   --c-3bet:  #3a0c18;
   --c-4bet:  #2a0c3a;
+  --c-allin: #4a0c10;
 
-  --font-ui:   'Oxanium', sans-serif;
-  --font-body: 'DM Sans', sans-serif;
+  /* ── MATRIX PALETTE (§9.1, decided 2026-06-18) — mirrors static/mtx_palette.js.
+     Used for legend swatches and the default empty-cell fill. ── */
+  --mtx-open: #2f9152;
+  --mtx-call: #3c78a8;
+  --mtx-3bet: #c8433a;
+  --mtx-4bet: #8e2f2a;
+  --mtx-allin:#6e2622;
+  --mtx-fold: #121a15;
+  --mtx-div:  #0b100c;
+
+  --font-ui:   'Hanken Grotesk', sans-serif;   /* was 'Oxanium' */
+  --font-body: 'Hanken Grotesk', sans-serif;   /* was 'DM Sans' */
 }
 
 /* ── RESET ──────────────────────────────────────────── */
@@ -56,12 +74,30 @@ body {
   flex-shrink: 0;
 }
 .logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   font-family: var(--font-ui);
   font-size: 18px;
   font-weight: 800;
-  letter-spacing: 4px;
-  color: var(--gold);
+  letter-spacing: .3px;
+  color: var(--text);
+  user-select: none;
 }
+.logo-mark {
+  display: grid;
+  place-items: center;
+  width: 25px; height: 25px;
+  border-radius: 8px;
+  background: linear-gradient(150deg, var(--gold-hi), var(--gold));
+  color: #1a1407;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.3);
+}
+.logo-text { letter-spacing: .2px; }
+.logo-accent { color: var(--gold); }
 .mode-tabs { display: flex; gap: 4px; }
 .mode-tab {
   padding: 6px 18px;
@@ -189,8 +225,8 @@ body {
 .toggle-track {
   width: 34px; height: 18px;
   border-radius: 9px;
-  background: #1a2a20;
-  border: 1px solid #2a3a2a;
+  background: var(--recessed);
+  border: 1px solid var(--stroke);
   position: relative;
   flex-shrink: 0;
   transition: .2s;
@@ -411,8 +447,8 @@ body {
 .mini-back {
   width: 28px; height: 39px;
   border-radius: 5px;
-  /* Ornate black+gold back — one SVG asset shared with .card-back (cards/goldBack.svg) */
-  background: #060606 url(/cards/goldBack.svg) center/100% 100% no-repeat;
+  /* Graphite raster back — shared asset with .card-back (cards/darkBack.png, recolored from LayIpoker) */
+  background: url(/cards/darkBack.png?v=20260623b) center/100% 100% no-repeat;
   box-shadow: 0 2px 8px rgba(0,0,0,.55);
   position: relative;
 }
@@ -423,15 +459,15 @@ body {
 .seat-circle {
   width: 46px; height: 46px;
   border-radius: 50%;
-  background: #0e1a12;
-  border: 2px solid #2a3a2a;
+  background: var(--surface-2);
+  border: 2px solid var(--stroke);
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-ui);
   font-size: 11px;
   font-weight: 700;
-  color: #4a6a54;
+  color: var(--text-dim);
   letter-spacing: .5px;
   box-shadow: 0 2px 8px rgba(0,0,0,.5);
   position: relative;
@@ -448,18 +484,14 @@ body {
   box-shadow: 0 0 14px rgba(192,57,43,.25), 0 2px 8px rgba(0,0,0,.5);
 }
 .seat-circle.is-dealer::after {
-  content: 'D';
+  /* Dealer button puck (cards/dealerButton.png, from LayIpoker) — replaces the
+     old gold 'D' badge. center/contain keeps the 30x25 puck's aspect. */
+  content: '';
   position: absolute;
-  top: -5px; right: -5px;
-  width: 16px; height: 16px;
-  background: var(--gold);
-  color: #111;
-  border-radius: 50%;
-  font-size: 9px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  top: -7px; right: -7px;
+  width: 22px; height: 19px;
+  background: url(/cards/dealerButton.png?v=20260623b) center/contain no-repeat;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.6));
 }
 .seat-name {
   font-family: var(--font-ui);
@@ -525,46 +557,74 @@ body {
 .chip-pot   { z-index: 4; gap: 5px; } /* collected pot, just under POT text */
 
 .coins { position: relative; }
+/* Casino-3D disc (variant A, user 2026-06-15). A clean elliptical top face +
+   an extruded side wall built from a box-shadow ladder in the disc's own
+   --wall colour, so a stack shows each chip's colour as a band down the side.
+   --cs (chip scale) is set by chips.js per stack; disc size AND the whole
+   wall/gloss ladder track the live table, keeping the JS stacking math (also
+   scaled by --cs) in lockstep. */
 .coin {
   position: absolute; left: 0;
-  /* --cs (chip scale) is set by chips.js per stack; disc size tracks the live
-     table, keeping the JS stacking math (also scaled by --cs) in lockstep. */
-  width: calc(19px * var(--cs, 1)); height: calc(8px * var(--cs, 1));
+  width: calc(21px * var(--cs, 1)); height: calc(11px * var(--cs, 1));
   border-radius: 50%;
   background:
-    radial-gradient(ellipse at 50% 30%, rgba(255,255,255,.30), rgba(255,255,255,0) 55%),
-    repeating-conic-gradient(from var(--rot,0deg),
-      var(--edge) 0deg 16deg, var(--body) 16deg 60deg);
+    radial-gradient(ellipse at 50% 30%, rgba(255,255,255,.42), rgba(255,255,255,0) 60%),
+    var(--body);
   box-shadow:
-    inset 0 1.5px 1px rgba(255,255,255,.30),
-    inset 0 -2.5px 2.5px rgba(0,0,0,.55),
-    0 1px 1px rgba(0,0,0,.6);
+    inset 0 calc(1px * var(--cs,1)) calc(1px * var(--cs,1)) rgba(255,255,255,.42),
+    inset 0 calc(-1.5px * var(--cs,1)) calc(1.5px * var(--cs,1)) rgba(0,0,0,.40),
+    0 calc(1px * var(--cs,1)) 0 var(--wall),
+    0 calc(2px * var(--cs,1)) 0 var(--wall),
+    0 calc(3px * var(--cs,1)) 0 var(--wall),
+    0 calc(4px * var(--cs,1)) calc(2px * var(--cs,1)) rgba(0,0,0,.5);
   border: 1px solid rgba(0,0,0,.5);
+}
+/* edge spots — a ring of light dashes on the top-face rim, staggered per disc
+   via --rot. Masked to the outer rim only; only the top disc's rim shows (the
+   wall of the disc above covers lower rims). */
+.coin::before {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  background: repeating-conic-gradient(from var(--rot,0deg),
+    var(--edge) 0deg 7deg, transparent 7deg 45deg);
+  -webkit-mask: radial-gradient(closest-side, transparent 58%, #000 62%);
+          mask: radial-gradient(closest-side, transparent 58%, #000 62%);
+  opacity: .65; pointer-events: none;
 }
 /* inlay + denomination, only on the top (fully visible) disc */
 .coin.top::after {
   content: attr(data-d);
-  position: absolute; inset: 13% 15%;
+  position: absolute; inset: 21% 24%;
   border-radius: 50%;
   background:
-    radial-gradient(ellipse at 50% 30%, rgba(255,255,255,.30), rgba(255,255,255,0) 60%),
+    radial-gradient(ellipse at 50% 32%, rgba(255,255,255,.35), rgba(255,255,255,0) 65%),
     var(--inlay);
   border: 1px solid var(--ring);
   display: flex; align-items: center; justify-content: center;
   font-family: var(--font-ui); font-weight: 800; color: var(--ink);
-  font-size: calc(5.5px * var(--cs, 1)); letter-spacing: -.2px;
+  font-size: calc(6.5px * var(--cs, 1)); letter-spacing: -.3px; z-index: 2;
 }
-/* denomination palettes (anchors: white=1, red=5, green=25) */
-.d-01 { --body:#54606a; --edge:#aab4bd; --inlay:#3f4a53; --ink:#e6edf2; --ring:#cfd8df; }
-.d-05 { --body:#1d5a8a; --edge:#6cc0f0; --inlay:#16466f; --ink:#e3f4ff; --ring:#8fd2ff; }
-.d-1  { --body:#d8d8d8; --edge:#7c7c7c; --inlay:#f4f4f4; --ink:#222;    --ring:#ffffff; }
-.d-5  { --body:#a3182a; --edge:#ec5a6e; --inlay:#7e1320; --ink:#ffe2e6; --ring:#ff8a98; }
-.d-25 { --body:#15743a; --edge:#56c47e; --inlay:#0e5a2c; --ink:#dcffe8; --ring:#7fe0a2; }
+/* denomination palettes (anchors: white=1, red=5, green=25). --wall = the
+   darker side-of-disc colour for the extruded edge (a band per chip in a stack). */
+.d-01 { --body:#54606a; --wall:#2f363c; --edge:#aab4bd; --inlay:#3f4a53; --ink:#e6edf2; --ring:#cfd8df; }
+.d-05 { --body:#1d5a8a; --wall:#103a5c; --edge:#6cc0f0; --inlay:#16466f; --ink:#e3f4ff; --ring:#8fd2ff; }
+.d-1  { --body:#d8d8d8; --wall:#9a9a9a; --edge:#7c7c7c; --inlay:#f4f4f4; --ink:#222;    --ring:#ffffff; }
+.d-5  { --body:#a3182a; --wall:#6d1019; --edge:#ec5a6e; --inlay:#7e1320; --ink:#ffe2e6; --ring:#ff8a98; }
+.d-25 { --body:#15743a; --wall:#0b4a26; --edge:#56c47e; --inlay:#0e5a2c; --ink:#dcffe8; --ring:#7fe0a2; }
+/* Blind chips: raster faces cropped from the reference client (chips/sb,bb,
+   user 2026-06-23). Only 0.5 (blue) and 1 (silver) have art for now — other
+   denoms keep the CSS casino-3D face above (CLAUDE.md #12 "номиналы потом").
+   Pure-CSS swap, chips.js untouched: the raster fills the .coin ellipse; the
+   extruded wall (box-shadow, --wall) and the ::after denomination inlay stay,
+   so stacking/scaling math is unchanged. ::before edge-spots hidden (the
+   raster chip carries its own). */
+.coin.d-1  { background-image: url(/static/chip_art/coin_1.png?v=20260623b);  background-size: cover; background-position: center; background-repeat: no-repeat; }
+.coin.d-05 { background-image: url(/static/chip_art/coin_05.png?v=20260623b); background-size: cover; background-position: center; background-repeat: no-repeat; }
+.coin.d-1::before, .coin.d-05::before { display: none; }
 
 .pot-row { display: flex; gap: 4px; align-items: flex-end; }
 /* amount pill under a player bet stack */
 .chip-amt {
-  margin-top: 5px;
+  margin-top: calc(6px * var(--cs, 1));   /* clear the extruded wall below the bottom disc */
   font-family: var(--font-ui); font-size: calc(11px * var(--cs, 1)); font-weight: 700;
   color: var(--text); letter-spacing: .3px;
   background: rgba(0,0,0,.5); border-radius: 9999px;
@@ -603,8 +663,8 @@ body {
   transition: transform .2s;
 }
 .card-back {
-  /* Ornate black+gold back — shared SVG asset (cards/goldBack.svg) */
-  background: #060606 url(/cards/goldBack.svg) center/100% 100% no-repeat;
+  /* Graphite raster back — shared asset (cards/darkBack.png, recolored from LayIpoker) */
+  background: url(/cards/darkBack.png?v=20260623b) center/100% 100% no-repeat;
   border: none;
 }
 .card-front {
@@ -676,6 +736,10 @@ body {
 .action-btn.btn-open  { background: var(--c-open); border-color: #1a6030; color: #7effa8; }
 .action-btn.btn-3bet  { background: var(--c-3bet); border-color: #6a1828; color: #ffb3c0; }
 .action-btn.btn-4bet  { background: var(--c-4bet); border-color: #4a1a6a; color: #e0b3ff; }
+/* vs_4bet aggressive line = all-in (hottest red). iso raise reuses the open-green
+   family (an isolation raise reads like an opening raise). */
+.action-btn.btn-allin { background: var(--c-allin); border-color: #7a1a22; color: #ffb0a8; }
+.action-btn.btn-raise { background: var(--c-open); border-color: #1a6030; color: #7effa8; }
 /* "Показать ответ" — neutral/meta, not a strategy colour. Equal footprint to
    the action buttons (decision: don't shame the honest "don't know") but a
    muted slate so it reads as a meta-action, not a claimed line. */
@@ -966,7 +1030,7 @@ body {
   justify-content: center;
   cursor: default;
   transition: filter .1s, transform .1s;
-  background: #1e2a22;
+  background: var(--mtx-fold);
   /* P-013: no native text selection of hand labels during drag-paint. */
   -webkit-user-select: none;
   user-select: none;
@@ -1029,32 +1093,46 @@ body {
 #matrix .cell-label, #editorMatrix .cell-label {
   position: absolute;                 /* pinned top-left — pro-tool look */
   top: 4px; left: 5px;
-  color: #fff;
+  color: #eef0f3;                     /* §9.1: white label + text-shadow (above) */
 }
 
-/* ── VISUALIZER LEGEND PANEL ─────────────────────────── */
-.viz-legend-panel {
-  gap: 6px;
-}
+/* ── VISUALIZER LEGEND — horizontal strip directly under the matrix ───
+   Moved out of the right side-panel (2026-06-18): the legend now sits below
+   the grid so the eye doesn't travel sideways. Visualizer drops to 2 columns. */
+.layout.viz-layout { grid-template-columns: 190px 1fr; }
 
-.legend-items {
+/* Matrix + legend stacked as one centered group → legend hugs the grid,
+   no large gap even when the left panel grows the row (vs-spots). */
+.matrix-stack {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 14px;
+}
+
+.viz-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  max-width: 620px;
+  padding-top: 2px;
 }
 
 .legend-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-size: 12px;
   color: var(--text-mid);
   font-family: var(--font-body);
 }
 
 .legend-swatch {
-  width: 28px;
-  height: 16px;
+  width: 26px;
+  height: 15px;
   border-radius: 3px;
   flex-shrink: 0;
 }
@@ -1177,7 +1255,7 @@ body {
   appearance: none;
   height: 4px;
   border-radius: 2px;
-  background: #2a3a2a;
+  background: var(--stroke);
   outline: none;
   cursor: pointer;
 }
@@ -1356,7 +1434,7 @@ body {
 .qs-popup {
   position: fixed;
   z-index: 200;
-  background: #0e1810;
+  background: var(--surface-3);
   border: 1px solid rgba(201,168,76,.3);
   border-radius: 10px;
   padding: 14px;
@@ -1409,7 +1487,7 @@ body {
 /* ── SCROLLBAR ───────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #2a3a2a; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--stroke); border-radius: 2px; }
 /* ── POSTFLOP BOARD CARDS (smaller, fit inside table oval) ─ */
 #pfBoard { gap: 8px; }
 #pfBoard .card { width: 48px; height: 68px; }
@@ -1469,7 +1547,7 @@ body {
   max-width: 260px;
   padding: 7px 9px;
   border-radius: 6px;
-  background: #0e1512;
+  background: var(--surface-3);
   border: 1px solid rgba(201,168,76,.4);
   box-shadow: 0 6px 20px rgba(0,0,0,.6);
   pointer-events: none;
@@ -1579,7 +1657,7 @@ body {
   gap: 3px !important;
   width: 100% !important;
   aspect-ratio: 1 / 1 !important;
-  background: #050a07;
+  background: #0c0d11;                 /* §9.1: matrix well off-green → neutral */
   padding: 6px;
   border-radius: 8px;
   border: 1px solid rgba(255,255,255,.04);
@@ -1595,7 +1673,7 @@ body {
   justify-content: center;
   min-width: 0;
   min-height: 0;
-  background: #1e2a22;
+  background: var(--mtx-fold);
   border: 1px solid rgba(255,255,255,.06);
   overflow: hidden;
   position: relative;
@@ -1800,6 +1878,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;     /* the End-Session button is a 4th item — let it wrap on narrow screens */
   gap: 16px;
   margin-top: 8px;
   width: 560px;        /* matches .table-wrap width so it looks aligned */
@@ -1828,6 +1907,25 @@ body {
   letter-spacing: 1px;
   color: var(--text-mid);
   text-transform: uppercase;
+}
+/* Auto-Next toggle — lives in the card-screen footer, flip during a session. */
+.learn-auto-toggle {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: var(--text-mid);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.learn-auto-toggle:hover { border-color: var(--text-dim); color: var(--text-dim); }
+.learn-auto-toggle.is-on {
+  border-color: var(--gold, #c9a84c);
+  color: var(--gold-hi, #e8c97a);
 }
 
 /* Reveal feedback strip — verdict + Easy + Next, shown after an answer. */
@@ -1883,6 +1981,49 @@ body {
   text-align: center;
   padding: 4px 8px;
 }
+
+/* ── Tap-a-seat-to-switch-hero affordance (Drill only) ──────────────────────
+   Seats that have data for the current spot are tappable to make that position
+   the hero (wireSeatClicks in drill.js); a gold ring on hover signals it.
+   Learn never adds .seat-selectable — its positions are scheduler-driven. */
+.seat-selectable { cursor: pointer; }
+.seat-selectable .seat-circle { transition: box-shadow .15s ease, border-color .15s ease; }
+.seat-selectable:hover .seat-circle { box-shadow: 0 0 0 2px var(--gold, #c9a84c); }
+
+/* ── "End Session" button (Drill footer + Learn footer) ─────────────────────
+   Neutral bordered button, brighter on hover — distinct from the gold
+   Deal/Start so it doesn't read as the primary action. */
+.session-end-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,.15);
+  background: transparent;
+  color: var(--text-mid);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease;
+}
+.session-end-btn:hover { border-color: var(--text-dim); color: var(--text); }
+
+/* Drill End-Session footer — a centered slim button under the table, on the
+   main screen so it's reachable on mobile without opening the settings sheet. */
+.drill-card-footer { display: flex; justify-content: center; margin-top: 2px; }
+
+/* Drill end-of-session summary overlay — mirrors #hintOverlay; the card inside
+   reuses .learn-entry-card so it matches Learn's summary visually. */
+#drillSummaryOverlay {
+  position: fixed; inset: 0; display: none;
+  align-items: center; justify-content: center; z-index: 200;
+}
+#drillSummaryOverlay.open { display: flex; }
+#drillSummaryBackdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,.82); cursor: pointer;
+}
+.drill-summary-box { position: relative; }
 
 /* Bottom-sheet scaffolding (Track B.4, Stage 2). These elements exist in the
    DOM on every viewport but are inert/hidden on desktop — the grab handle is
@@ -1957,12 +2098,17 @@ body {
   .mode-tab { flex-shrink: 0; padding: 6px 12px; }
   .session-pill { flex-shrink: 0; font-size: 11px; }
 
+  /* Editor is unusable at phone widths (3-column paint UI), so hide its tab —
+     the mode is then unreachable on mobile. Default mode is Drill, so nothing
+     opens Editor once the tab is gone. Desktop keeps it. */
+  .mode-tab[data-mode="editor"] { display: none; }
+
   /* — LAYOUT: 3-column grid → single column. The center section (table or
        matrix) is reordered to the top. The RIGHT panel (stats / history /
        legend) flows below the table and the page scrolls. The LEFT panel
        (settings) is lifted out of flow into a bottom sheet (below).
        Bottom padding leaves room for the peeking sheet handle. — */
-  .layout { grid-template-columns: 1fr; padding-bottom: 52px; }
+  .layout, .layout.viz-layout { grid-template-columns: 1fr; padding-bottom: 52px; }
   .table-section, .viz-section, .editor-section { order: -1; }
   .panel-right {
     border-left: none;
@@ -2123,3 +2269,176 @@ body {
 }
 .matrix-tip .mtip-k { color: var(--text-mid); }
 .matrix-tip .mtip-v { font-variant-numeric: tabular-nums; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   PROGRESS DASHBOARD (Track D, Stage 2 — личный кабинет)
+   User menu in the topbar + the per-user Progress page (#accountMode),
+   rendered by account.js. Graphite + gold, Hanken — design.md tokens.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── User menu (topbar, right) ─────────────────────────────────────── */
+.user-menu { position: relative; display: flex; align-items: center; margin-left: 14px; }
+.user-menu-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--surface-2); border: 1px solid var(--stroke);
+  color: var(--text-mid); cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.user-menu-btn:hover { color: var(--gold); border-color: var(--gold); }
+.user-menu-btn svg {
+  width: 18px; height: 18px; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.user-menu-pop {
+  position: absolute; top: 42px; right: 0; min-width: 190px;
+  background: var(--surface-3); border: 1px solid var(--stroke);
+  border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,.5);
+  padding: 6px; display: none; z-index: 1000;
+}
+.user-menu-pop.open { display: block; }
+.user-menu-email {
+  font-size: 12px; color: var(--text-dim); padding: 6px 10px 8px;
+  border-bottom: 1px solid var(--panel-border); margin-bottom: 4px;
+  word-break: break-all;
+}
+.user-menu-item {
+  display: block; width: 100%; text-align: left; background: transparent;
+  border: none; color: var(--text); font: inherit; font-size: 13px;
+  padding: 8px 10px; border-radius: 7px; cursor: pointer;
+}
+.user-menu-item:hover { background: var(--surface-2); }
+.user-menu-signout { color: var(--text-mid); }
+.user-menu-signout:hover { color: var(--wrong); }
+
+/* ── Account page shell ────────────────────────────────────────────── */
+.layout.account-layout { grid-template-columns: 1fr; overflow-y: auto; }
+.account-page { width: 100%; max-width: 1000px; margin: 0 auto; padding: 22px 28px 60px; }
+.account-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.account-title {
+  font-family: var(--font-ui); font-size: 22px; font-weight: 700;
+  color: var(--text); letter-spacing: .5px;
+}
+.dash-refresh {
+  background: transparent; border: 1px solid var(--stroke); color: var(--text-mid);
+  width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 15px;
+}
+.dash-refresh:hover { color: var(--text); border-color: var(--gold); }
+
+/* ── Panels / notes ────────────────────────────────────────────────── */
+.dash-panel {
+  background: var(--panel); border: 1px solid var(--panel-border);
+  border-radius: 14px; padding: 18px 20px; margin-top: 16px;
+}
+.dash-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 14px;
+}
+.dash-panel-head h3 {
+  font-family: var(--font-ui); font-size: 13px; font-weight: 600;
+  letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-mid);
+}
+.dash-note {
+  padding: 22px; text-align: center; color: var(--text-mid); font-size: 14px;
+  background: var(--panel); border: 1px solid var(--panel-border);
+  border-radius: 14px; margin-top: 16px;
+}
+.dash-note-big { padding: 48px 24px; font-size: 15px; line-height: 1.6; }
+.dash-note-dim { color: var(--text-dim); font-size: 13px; }
+.dash-retry {
+  background: var(--gold-dim); border: 1px solid var(--gold); color: var(--gold);
+  border-radius: 7px; padding: 4px 10px; font: inherit; cursor: pointer; margin-left: 6px;
+}
+
+/* ── Panel A — counters ────────────────────────────────────────────── */
+.dash-counters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.dash-counter {
+  background: var(--surface-2); border: 1px solid var(--panel-border);
+  border-radius: 12px; padding: 16px 18px;
+}
+.dc-num {
+  font-family: var(--font-ui); font-size: 28px; font-weight: 700; color: var(--text);
+  line-height: 1.1;
+}
+.dc-label {
+  font-size: 11px; letter-spacing: 1.3px; text-transform: uppercase;
+  color: var(--text-dim); margin-top: 6px;
+}
+.dc-extra { font-size: 11px; color: var(--text-mid); margin-top: 6px; }
+
+/* ── Panel B — calendar heatmap ────────────────────────────────────── */
+.cal-wrap { --cell: 12px; --cgap: 3px; --wlw: 30px; overflow-x: auto; padding-bottom: 4px; }
+.cal-months { display: flex; gap: var(--cgap); margin-bottom: 4px; }
+.cal-spacer { width: var(--wlw); flex: 0 0 var(--wlw); }
+.cal-mon {
+  width: var(--cell); flex: 0 0 var(--cell); font-size: 9px;
+  color: var(--text-dim); white-space: nowrap; overflow: visible;
+}
+.cal-body { display: flex; gap: var(--cgap); }
+.cal-wdays {
+  display: grid; grid-template-rows: repeat(7, var(--cell)); gap: var(--cgap);
+  width: var(--wlw); flex: 0 0 var(--wlw);
+}
+.cal-wdays span { font-size: 9px; color: var(--text-dim); line-height: var(--cell); }
+.cal-cols { display: flex; gap: var(--cgap); }
+.cal-col { display: grid; grid-template-rows: repeat(7, var(--cell)); gap: var(--cgap); }
+.cal-cell { width: var(--cell); height: var(--cell); border-radius: 2px; display: inline-block; }
+.cal-cell.l0 { background: var(--recessed); box-shadow: inset 0 0 0 1px rgba(255,255,255,.03); }
+.cal-cell.l1 { background: rgba(47,145,82,.30); }
+.cal-cell.l2 { background: rgba(47,145,82,.58); }
+.cal-cell.l3 { background: #3aa862; }
+.cal-cell.cal-empty { background: transparent; }
+.cal-legend { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-dim); }
+.cal-legend .cal-cell { vertical-align: middle; }
+.cal-legend-sep { margin: 0 6px; color: var(--stroke); }
+
+/* ── Panel C — volume + accuracy bars ──────────────────────────────── */
+.dash-bars {
+  display: flex; align-items: flex-end; gap: 4px; height: 130px; padding-top: 6px;
+}
+.bar { flex: 1 1 0; height: 100%; display: flex; align-items: flex-end; min-width: 4px; }
+.bar-stack {
+  width: 100%; height: 100%; display: flex; flex-direction: column;
+  justify-content: flex-end; gap: 1px;
+}
+.bar-seg { width: 100%; border-radius: 2px 2px 0 0; flex-shrink: 0; }
+.bar-correct { background: var(--mtx-open); }
+.bar-wrong { background: #2c313a; }
+.dash-bars-legend { display: flex; gap: 16px; margin-top: 10px; font-size: 11px; color: var(--text-dim); }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+.sw-correct { background: var(--mtx-open); }
+.sw-wrong { background: #2c313a; }
+
+/* ── Panel D — accuracy by spot / position ─────────────────────────── */
+.spot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.spot-card {
+  background: var(--surface-2); border: 1px solid var(--panel-border);
+  border-radius: 12px; padding: 14px 16px;
+}
+.spot-card-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 8px; margin-bottom: 10px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.spot-name {
+  font-family: var(--font-ui); font-weight: 700; font-size: 14px;
+  color: var(--text); letter-spacing: .5px;
+}
+.spot-overall { font-size: 11px; color: var(--text-mid); white-space: nowrap; }
+.spot-row {
+  display: grid; grid-template-columns: 62px 1fr 44px 38px; align-items: center;
+  gap: 8px; padding: 3px 0; font-size: 12px;
+}
+.spot-key { color: var(--text-mid); font-family: var(--font-ui); }
+.spot-acc-bar { height: 6px; background: var(--recessed); border-radius: 3px; overflow: hidden; }
+.spot-acc-fill { display: block; height: 100%; background: var(--mtx-open); border-radius: 3px; }
+.spot-acc-val { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.spot-hands { text-align: right; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 768px) {
+  .dash-counters { grid-template-columns: repeat(2, 1fr); }
+  .account-page { padding: 16px 14px 60px; }
+  .spot-grid { grid-template-columns: 1fr; }
+}

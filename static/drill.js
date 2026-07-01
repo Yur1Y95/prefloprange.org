@@ -10,6 +10,7 @@ const state = {
   waiting:      false,
   timer:        { id: null, left: 8, total: 8 },
   autoNext:     { id: null },
+  session:      { answered: 0, correct: 0 },   // this-session tally for the End-Session summary
   gameType:     'Cash',
   selectedFile: '',      // empty = default cash file
   _allFiles:    [],
@@ -55,22 +56,28 @@ const SLOT_POS = {
 };
 
 // Offsets push the posted-blind / bet chip onto open felt in front of a seat,
-// toward the pot. Top seats render their stack pill BELOW the circle (toward
-// center), so their chips need a larger inward (downward) offset to clear it.
+// toward the pot. The whole .seat (46px circle + name + stack pill, centered on
+// the slot point) spans roughly ±40px, so a chip parked too close lands ON the
+// avatar. These offsets clear that box: the chip sits between the seat and the
+// pot ("bet forward"), not on the icon. Top seats also push their stack pill
+// BELOW the circle, so they need the largest inward (downward) offset to clear
+// both circle and pill. Bumped 2026-06-23 (P-043) — was ~38/50, chips overlapped
+// the seat after the circle grew to 46px in the redesign. dx/dy are reference px
+// (felt 616×308); chips.js scales them by sx/sy on smaller tables.
 const SLOT_CHIP = {
   6: [
-    [   0, -38], [ -28, -28], [ -30,  44],
-    [   0,  50], [  30,  44], [  28, -28],
+    [   0, -60], [ -44, -44], [ -44,  62],
+    [   0,  66], [  44,  62], [  44, -44],
   ],
   8: [
-    [   0, -35], [ -28, -28], [ -42,   0],
-    [ -30,  42], [   0,  48], [  30,  42],
-    [  42,   0], [  28, -28],
+    [   0, -58], [ -44, -44], [ -60,   0],
+    [ -44,  60], [   0,  64], [  44,  60],
+    [  60,   0], [  44, -44],
   ],
   9: [
-    [   0, -35], [ -25, -25], [ -42,   0],
-    [ -34,  40], [ -14,  48], [  14,  48],
-    [  34,  40], [  42,   0], [  25, -25],
+    [   0, -58], [ -40, -42], [ -60,   0],
+    [ -46,  56], [ -18,  64], [  18,  64],
+    [  46,  56], [  60,   0], [  40, -42],
   ],
 };
 
@@ -144,6 +151,7 @@ async function boot() {
     // Step 3: stats + history (non-blocking)
     loadStats().catch(() => {});
     loadHistory().catch(() => {});
+    applyStorageMode();   // hide Reset/Clear when the append-only DB journal backs stats
 
     // Step 4: first hand
     await newHand();
@@ -336,13 +344,18 @@ function bindEvents() {
   document.getElementById('resetBtn').addEventListener('click', resetStats);
   document.getElementById('clearHistoryBtn').addEventListener('click', clearHistory);
 
+  // End-session summary
+  document.getElementById('drillEndBtn').addEventListener('click', endDrillSession);
+  document.getElementById('drillNewSessionBtn').addEventListener('click', startNewDrillSession);
+  document.getElementById('drillSummaryBackdrop').addEventListener('click', closeDrillSummary);
+
   // Hint modal
   document.getElementById('fbHint').addEventListener('click', showHint);
   document.getElementById('hintCloseBtn').addEventListener('click', closeHint);
   document.getElementById('hintBackdrop').addEventListener('click', closeHint);
   // Keyboard shortcuts (Escape closes hint, Space/Enter deals, f/c/o/r/4 answer)
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeHint(); return; }
+    if (e.key === 'Escape') { closeHint(); closeDrillSummary(); return; }
     if (!state.waiting) {
       if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); newHand(); }
       return;
@@ -399,6 +412,17 @@ function refreshSpotAvailability() {
   }
 }
 
+// Switch hero to `pos` and re-deal. Shared by the hero position buttons and by
+// tapping a seat on the table (wireSeatClicks). renderVillainSection picks a
+// valid villain if the current one no longer applies, so vs-spots stay sane.
+function selectHero(pos) {
+  state.heroPos = pos;
+  renderHeroButtons();
+  renderVillainSection();
+  renderSeats();
+  newHand();
+}
+
 // ── POSITION BUTTONS ─────────────────────────────────
 function renderHeroButtons() {
   refreshSpotAvailability();
@@ -422,13 +446,7 @@ function renderHeroButtons() {
     btn.textContent = pos;
     btn.disabled = !available;
     if (available) {
-      btn.addEventListener('click', () => {
-        state.heroPos = pos;
-        renderHeroButtons();
-        renderVillainSection();
-        renderSeats();
-        newHand();
-      });
+      btn.addEventListener('click', () => selectHero(pos));
     }
     wrap.appendChild(btn);
   });
@@ -492,6 +510,25 @@ function renderSeats(context) {
     spot:       state.spot,
     villainPos: state.villainPos,
     stacks:     context?.stacks,
+  });
+  wireSeatClicks();
+}
+
+// Tap a table seat to switch hero (Drill only — Learn positions are
+// scheduler-driven, so its seats are never wired). A seat is selectable only
+// when the current spot has data for that position; tapping it makes that
+// position the hero, and the villain auto-adjusts (see selectHero →
+// renderVillainSection). Seats are rebuilt on every renderSeats, so listeners
+// are always fresh and never leak.
+function wireSeatClicks() {
+  const wrap = document.getElementById('seats');
+  if (!wrap) return;
+  wrap.querySelectorAll('.seat').forEach(seat => {
+    const pos = seat.dataset.pos;
+    if (!pos || pos === state.heroPos) return;        // hero's own seat: not selectable
+    if (!heroPosAvailable(state.spot, pos)) return;    // no data for this spot here
+    seat.classList.add('seat-selectable');
+    seat.addEventListener('click', () => selectHero(pos));
   });
 }
 
@@ -666,11 +703,20 @@ function renderChipsInto(spec) {
   // chips in the middle (that would double-count the blinds). The pot SIZE is
   // shown by the .pot-block text. Centre chip stacks belong to postflop, where
   // previous-street bets are actually gathered into the pot.
-  addBet('SB', 0.5);
-  addBet('BB', 1);
-  if (context.open_raiser     && context.open_size)     addBet(context.open_raiser,     context.open_size);
-  if (context.threebet_raiser && context.threebet_size) addBet(context.threebet_raiser, context.threebet_size);
-  if (context.fourbet_raiser  && context.fourbet_size)  addBet(context.fourbet_raiser,  context.fourbet_size);
+  //
+  // ONE stack per seat. A player who posted a blind AND later raised (e.g. SB
+  // posts 0.5 then 3-bets to 8.8) must show only the raise — the blind is part
+  // of it, not a second pile. Collect per position keeping the largest (final)
+  // contribution, then draw once each. Fixes P-032: SB blind chip overlapping
+  // the SB 3-bet chip in CO-vs-SB spots.
+  const bets = {};
+  const put = (pos, amt) => { if (pos && amt) bets[pos] = Math.max(bets[pos] || 0, amt); };
+  put('SB', 0.5);
+  put('BB', 1);
+  put(context.open_raiser,     context.open_size);
+  put(context.threebet_raiser, context.threebet_size);
+  put(context.fourbet_raiser,  context.fourbet_size);
+  for (const pos in bets) addBet(pos, bets[pos]);
 }
 
 // ── CARDS ─────────────────────────────────────────────
@@ -849,6 +895,8 @@ async function submitAnswer(action, isTimeout = false) {
     });
     const result = await res.json();
     showFeedback(result);
+    state.session.answered += 1;
+    if (result.correct) state.session.correct += 1;
     loadStats();
     loadHistory();
 
@@ -856,7 +904,7 @@ async function submitAnswer(action, isTimeout = false) {
     // needs time to inspect the range via "Show Range" — silently advancing
     // would defeat the point of the hint button.
     if (document.getElementById('autoNextToggle').checked && result.correct) {
-      state.autoNext.id = setTimeout(newHand, 1400);
+      state.autoNext.id = setTimeout(newHand, 1000);
     }
   } catch (e) {
     console.error('submitAnswer error:', e);
@@ -983,13 +1031,8 @@ function _hintExpandActions(raw) {
   return out;
 }
 
-function _hintRfiColor(freq) {
-  if (freq >= 1.0)  return ['#2E7D32', '#fff'];
-  if (freq >= 0.75) return ['#66BB6A', '#000'];
-  if (freq >= 0.5)  return ['#D4E157', '#000'];
-  if (freq >  0)    return ['#FFA726', '#000'];
-  return ['#1e2a22', '#3a5a44'];
-}
+// Matrix palette is shared via static/mtx_palette.js (window.MTX), see §9.1.
+// RFI hint cells use MTX.rfiFill (split-bar of open), not the old buckets.
 
 function showHint() {
   if (!state.drillHand) return;
@@ -1002,41 +1045,25 @@ function showHint() {
 
   const { range, type } = getHintRange();
 
-  // Legend
+  // Legend — colours from the shared MTX palette (§9.1). RFI is one Open
+  // swatch now (split-bar of open frequency), not the old 4 buckets.
   const legend = document.getElementById('hintLegend');
+  const A = MTX.COLORS.act;
+  const fold = `${MTX.COLORS.fold};border:1px solid var(--stroke)`;
+  let rows;
   if (type === 'RFI') {
-    legend.innerHTML = [
-      ['#2E7D32', '100% Open'], ['#66BB6A', '75%+'], ['#D4E157', '50%+'],
-      ['#FFA726', '<50%'], ['#1e2a22;border:1px solid #2a3a2a', 'Fold'],
-    ].map(([bg, label]) =>
-      `<div class="hint-legend-item"><div class="hint-legend-swatch" style="background:${bg}"></div>${label}</div>`
-    ).join('');
+    rows = [[A.open, 'Open'], [fold, 'Fold']];
   } else if (dh.spot === 'vs_4bet') {
-    legend.innerHTML = [
-      ['#7b1fa2', 'All-In (5bet)'],
-      ['#3F7FB5', 'Call'],
-      ['#1e2a22;border:1px solid #2a3a2a', 'Fold'],
-    ].map(([bg, label]) =>
-      `<div class="hint-legend-item"><div class="hint-legend-swatch" style="background:${bg}"></div>${label}</div>`
-    ).join('');
+    rows = [[A.allin, 'All-In (5bet)'], [A.call, 'Call'], [fold, 'Fold']];
   } else if (dh.spot === 'iso') {
-    legend.innerHTML = [
-      ['#2E7D32', 'Raise (ISO)'],
-      ['#3F7FB5', 'Call (limp)'],
-      ['#1e2a22;border:1px solid #2a3a2a', 'Fold'],
-    ].map(([bg, label]) =>
-      `<div class="hint-legend-item"><div class="hint-legend-swatch" style="background:${bg}"></div>${label}</div>`
-    ).join('');
+    rows = [[A.open, 'Raise (ISO)'], [A.call, 'Call (limp)'], [fold, 'Fold']];
   } else {
     const isVs3bet = dh.spot === 'vs_3bet';
-    legend.innerHTML = [
-      [isVs3bet ? '#c0392b' : '#F44336', isVs3bet ? '4-Bet' : '3-Bet'],
-      ['#3F7FB5', 'Call'],
-      ['#1e2a22;border:1px solid #2a3a2a', 'Fold'],
-    ].map(([bg, label]) =>
-      `<div class="hint-legend-item"><div class="hint-legend-swatch" style="background:${bg}"></div>${label}</div>`
-    ).join('');
+    rows = [[isVs3bet ? A['4bet'] : A['3bet'], isVs3bet ? '4-Bet' : '3-Bet'], [A.call, 'Call'], [fold, 'Fold']];
   }
+  legend.innerHTML = rows.map(([bg, label]) =>
+    `<div class="hint-legend-item"><div class="hint-legend-swatch" style="background:${bg}"></div>${label}</div>`
+  ).join('');
 
   // Build 13×13 grid — force inline grid layout so it can't be broken by CSS issues
   const grid = document.getElementById('hintGrid');
@@ -1125,46 +1152,30 @@ function getHintRange() {
 
 function colorHintCell(cell, value, type, spot) {
   if (value == null || (typeof value === 'object' && Object.keys(value).length === 0)) {
-    cell.style.background = '#1e2a22';
-    cell.style.color      = '#3a5a44';
+    cell.style.background = MTX.COLORS.fold;
+    cell.style.color      = '#52586399';   // §9.1: muted empty-cell label
     return;
   }
 
-  if (type === 'RFI') {
-    if (typeof value === 'number') {
-      const [bg, fg] = _hintRfiColor(value);
-      cell.style.background = bg;
-      cell.style.color      = fg;
-    } else {
-      cell.style.background = _hintGradient(value, { open:'#2E7D32', call:'#3F7FB5', fold:'#1e2a22' }, ['open','call','fold']);
-      cell.style.color      = '#fff';
-    }
-  } else if (type === 'vs_4bet') {
-    const colors = { allin:'#7b1fa2', call:'#3F7FB5', fold:'#1e2a22' };
-    cell.style.background = _hintGradient(value, colors, ['allin','call','fold']);
-    cell.style.color      = '#fff';
-  } else if (type === 'iso') {
-    const colors = { raise:'#2E7D32', call:'#3F7FB5', fold:'#1e2a22' };
-    cell.style.background = _hintGradient(value, colors, ['raise','call','fold']);
-    cell.style.color      = '#fff';
-  } else {
-    const colors = { '3bet':'#F44336', call:'#3F7FB5', '4bet':'#c0392b', fold:'#1e2a22' };
-    const order  = spot === 'vs_3bet' ? ['4bet','call','fold'] : ['3bet','call','fold'];
-    cell.style.background = _hintGradient(value, colors, order);
-    cell.style.color      = '#fff';
-  }
-}
+  const A = MTX.COLORS.act;
+  // Build a split-bar (1px divider) from ordered non-fold actions; fold = remainder.
+  const bar = (colorMap, order) =>
+    MTX.splitGradient(order.filter(a => a !== 'fold').map(a => [colorMap[a], value[a] || 0]), MTX.COLORS.fold);
 
-function _hintGradient(value, colorMap, order) {
-  let cum = 0; const stops = [];
-  for (const a of order) {
-    const isLast = a === order[order.length - 1];
-    const f = value[a] ?? (isLast ? Math.max(0, 1 - Object.values(value).reduce((s,v)=>s+v, 0)) : 0);
-    if (f <= 0) continue;
-    stops.push(`${colorMap[a]||'#333'} ${Math.round(cum*100)}% ${Math.round((cum+f)*100)}%`);
-    cum += f;
+  if (type === 'RFI') {
+    cell.style.background = typeof value === 'number'
+      ? MTX.rfiFill(value)
+      : bar({ open: A.open, call: A.call }, ['open', 'call']);
+  } else if (type === 'vs_4bet') {
+    cell.style.background = bar({ allin: A.allin, call: A.call }, ['allin', 'call']);
+  } else if (type === 'iso') {
+    cell.style.background = bar({ raise: A.open, call: A.call }, ['raise', 'call']);
+  } else {
+    const colorMap = { '3bet': A['3bet'], call: A.call, '4bet': A['4bet'] };
+    const order    = spot === 'vs_3bet' ? ['4bet', 'call'] : ['3bet', 'call'];
+    cell.style.background = bar(colorMap, order);
   }
-  return stops.length ? `linear-gradient(to right,${stops.join(',')})` : '#1e2a22';
+  cell.style.color = '#eef0f3';
 }
 
 // ── SPOT LINE ─────────────────────────────────────────
@@ -1204,6 +1215,24 @@ function stopTimer() {
   state.timer.id = null;
   const ring = document.getElementById('timerRing');
   if (ring) ring.style.display = 'none';
+}
+
+// ── STORAGE MODE ──────────────────────────────────────
+// When a database backs the app, Drill stats/history come from the append-only
+// `answers` journal — which can't be "reset" or "cleared" by deletion. So we
+// hide those two buttons in DB mode. /api/db/health.configured tells us the
+// mode; any failure (JSON mode, or health unreachable) leaves the buttons as-is.
+async function applyStorageMode() {
+  try {
+    const res = await fetch('/api/db/health');
+    const h   = await res.json();
+    if (h && h.configured) {
+      for (const id of ['resetBtn', 'clearHistoryBtn']) {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      }
+    }
+  } catch { /* JSON mode or health unavailable — keep buttons visible */ }
 }
 
 // ── STATS ─────────────────────────────────────────────
@@ -1262,6 +1291,32 @@ function renderStats(stats) {
 async function resetStats() {
   await fetch('/api/stats/reset', { method: 'POST' });
   loadStats();
+}
+
+// ── END SESSION (summary overlay) ─────────────────────
+// The top stats pill is all-time (stats.json); this summary covers only THIS
+// session — hands answered since page load or the last "New session" — tracked
+// in state.session and incremented in submitAnswer.
+function endDrillSession() {
+  stopTimer();
+  clearAutoNext();
+  const { answered, correct } = state.session;
+  document.getElementById('dsAnswered').textContent = answered;
+  document.getElementById('dsCorrect').textContent  = correct;
+  document.getElementById('dsAccuracy').textContent =
+    answered ? Math.round(correct / answered * 100) + '%' : '—';
+  document.getElementById('drillSummaryOverlay').classList.add('open');
+}
+
+function closeDrillSummary() {
+  document.getElementById('drillSummaryOverlay').classList.remove('open');
+}
+
+function startNewDrillSession() {
+  state.session.answered = 0;
+  state.session.correct  = 0;
+  closeDrillSummary();
+  newHand();
 }
 
 // ── AUTO-NEXT HELPER ─────────────────────────────────
@@ -1323,7 +1378,7 @@ function renderHistory(entries) {
     return `
       <div class="history-entry ${cls}">
         <div class="h-top">
-          <span class="h-hand">${e.card1} ${e.card2}</span>
+          <span class="h-hand">${e.card1 ? (e.card1 + ' ' + e.card2) : e.hand}</span>
           ${evHtml}
         </div>
         <div class="h-detail">${spot} · ${e.ts}</div>

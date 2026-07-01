@@ -12,6 +12,11 @@ import os
 import shutil
 import tempfile
 
+# Force the JSON branch of cards_store: a developer's local .env with
+# DATABASE_URL must not make this integration test read/write the live `cards`
+# table. Pop it before importing srs_api (which imports cards_store -> db).
+os.environ.pop("DATABASE_URL", None)
+
 # Set up a sandbox project directory BEFORE importing srs_api so its BASE_DIR
 # resolves to a clean throwaway location.
 _TMP = tempfile.mkdtemp(prefix="srs_api_test_")

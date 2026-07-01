@@ -1,0 +1,11 @@
+{
+  "nl10": { "folder": "tools/gtow_dumps/nl10", "pack": "data/GTOWNL10.json" },
+  "nl50": { "folder": "tools/gtow_dumps/nl50", "pack": "data/GTOWNL50.json" },
+  "nl100": { "folder": "tools/gtow_dumps/nl100", "pack": "data/GTOWNL100.json" },
+  "nl200": { "folder": "tools/gtow_dumps/nl200", "pack": "data/GTOWNL200.json" },
+  "nl500": { "folder": "tools/gtow_dumps/nl500", "pack": "data/GTOWNL500.json" },
+  "nl1000": { "folder": "tools/gtow_dumps/nl1000", "pack": "data/GTOWNL1000.json" },
+  "nl2000": { "folder": "tools/gtow_dumps/nl2000", "pack": "data/GTOWNL2000.json" },
+  "nl5000": { "folder": "tools/gtow_dumps/nl5000", "pack": "data/GTOWNL5000.json" },
+  "nl10000": { "folder": "tools/gtow_dumps/nl10000", "pack": "data/GTOWNL10000.json" }
+}
